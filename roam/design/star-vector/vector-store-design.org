@@ -1,0 +1,116 @@
+:PROPERTIES:
+:ID: 53cbc0fe-14a1-4aca-baeb-c8669ba7cc6e
+:END:
+#+TITLE: Vector Store Design
+#+CREATED: [2026-10-03 Sat 21:22]
+#+LAST_MODIFIED: [2026-10-03 Sat 21:22]
+#+ROAM_SCHEMA: org-roam-meta/v1
+#+ROAM_KIND: design
+#+ROAM_VISIBILITY: private
+#+CENSOR_PROFILE: strict
+#+SOURCE: https://github.com/lost-rob0t/star-vector/issues/1; https://github.com/nsaspy/star-lang/commit/919833266723edc9bddb337d606f72ae25fb8ced
+#+AI_GENERATED: t
+#+AI_TAG: ai_4a78bd4baf462f05
+#+FILETAGS: :ai:ai_4a78bd4baf462f05:star-vector:nim:common-lisp:c-abi:vector-search:
+
+#+description: Approved design for the Nim vector engine, C ABI, CLI, and Common Lisp client.
+#+status: IMPLEMENTED
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Research | Auto-RAGE worker | APPROVED | Canonical authority and implementation options reviewed | Vector Store Research |
+| Design | Auto-RAGE worker | APPROVED | Adversarial review and bounded decision recorded | This document |
+| Execution | Auto-RAGE worker | APPROVED | Tests demonstrate every acceptance criterion | Issue 1 |
+
+* Analyze
+
+The store must persist caller-provided embeddings and complete StarIntel documents, expose exact deterministic search, remain consumable from C, and provide a Common Lisp client generated against the actual C header.
+
+* Design
+
+** Ownership and persistence
+
+- One =VectorStore= owns a fixed positive dimension and a map keyed by canonical StarIntel document ID.
+- The on-disk =star-vector/1= JSON snapshot contains the dimension and sorted records.
+- Upsert and delete atomically replace the snapshot before reporting success.
+- StarIntel schema and portable-manifest artifacts are copied by a lock-aware synchronization script and embedded into the Nim library.
+
+** Search contract
+
+- Exact linear search supports cosine similarity, dot product, Euclidean distance, and Manhattan distance.
+- Similarities sort descending; distances sort ascending; ties sort by document ID.
+- Every vector must match the store dimension and contain only finite values. Cosine rejects a zero query vector and omits zero-norm stored vectors.
+
+** ABI and clients
+
+- The C ABI uses an opaque handle and integer status codes.
+- Documents and search results cross the ABI as UTF-8 JSON allocated by the library and released only through =sv_string_free=.
+- The Nim CLI exercises init, upsert, get, delete, and search.
+- Common Lisp uses CFFI plus a Grovel file that reads status and metric constants from =star_vector.h=.
+
+** Failure and authority boundaries
+
+- Invalid JSON, invalid StarIntel documents, dimension mismatches, unsupported metrics, and persistence failures return errors without mutating the store.
+- Star Vector owns embeddings and index persistence; Star-Lang remains schema authority.
+- This slice is process-thread safe but does not claim multi-process writer coordination.
+
+* Adversarial Review
+
+- Zero vectors make cosine undefined: reject zero queries and skip zero-norm candidates.
+- NaN and infinity can destabilize ordering and JSON: reject them at ingress and query time.
+- Hash-table iteration is nondeterministic: sort persisted records and search ties by ID.
+- Returning Nim strings through C would create allocator ambiguity: return copied buffers with an explicit free function.
+- Partial writes can corrupt the index: write a sibling temporary snapshot and atomically rename it.
+- A hand-maintained dtype switch will drift: derive dtype-to-definition resolution from the pinned portable manifest.
+- Reopening with a different dimension must fail closed.
+
+* Decision
+
+Auto-RAGE approves this exact-search and stable-ABI slice. Approximate indexing, embedding generation, network services, and multi-process locking are rejected from this iteration because they are not required to establish the canonical storage and ABI contracts.
+
+* Acceptance Criteria
+
+- Valid StarIntel 0.10.1 documents persist and survive reopen; invalid documents do not mutate state.
+- All four metrics return deterministic expected order and values.
+- C ABI lifecycle, upsert, lookup, search, delete, error, and ownership paths pass under a native C test.
+- Common Lisp loads Grovel-derived constants and exercises the Nim shared library through CFFI.
+- The CLI and installable Nix package build, and repository, Nim, C, Lisp, schema-lock, and Prolog gates pass.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-03 | Approved initial exact-store design | Codex Auto-RAGE | Issue 1 and adversarial review above |
+| 2026-10-03 | Implemented and verified the bounded vector-store slice | Codex Auto-RAGE | Nix package gate and Prolog verification |
+
+* IMPLEMENTED RAGE Execution Record
+
+** Summary
+
+Implemented the persistent Nim vector library, CLI, stable C ABI, Common Lisp
+CFFI/Grovel client, StarIntel schema validation, and reproducible Nix package.
+
+** Files
+
+- =src/star_vector/= and =src/star_vector_cli.nim=
+- =include/star_vector.h=
+- =lisp/=
+- =schema/= and =scripts/sync-starintel-schema.py=
+- =flake.nix= and =flake.lock=
+
+** Tests
+
+- =nix flake check --no-update-lock-file path:$PWD -L=
+- StarIntel schema authority and local hash checks
+- Nim exact-search and validation tests
+- native C ABI lifecycle and ownership test
+- command-line integration test
+- SBCL CFFI/Grovel integration test
+- repository RAGE and durable Prolog verification gates
+
+** Notes
+
+- Exact exhaustive search is the intentionally bounded backend for this release.
+- Store writes are thread-safe within one process; multi-process writer coordination remains out of scope.

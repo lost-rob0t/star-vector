@@ -1,84 +1,127 @@
-#+title: RAGE Research Template
-#+description: Reusable Org-roam research, design, implementation, and verification control plane.
+#+title: Star Vector
+#+description: Exact vector storage and search for validated StarIntel documents.
 
-* RAGE
+* Star Vector
 
-RAGE means *Recursive Analysis with Gated Execution*.
+Star Vector is a small persistent vector store implemented in Nim. Every vector
+is stored with a StarIntel document validated against the repository-pinned
+StarIntel 0.10.1 schema. The same implementation is available through:
 
-The repository is a reusable research control plane. Research creates evidence. Design turns evidence into a bounded implementation proposal. Execution only advances through explicit gates. Results become new evidence and feed the next loop.
+- the =star_vector= Nim module;
+- the =star-vector= command-line client;
+- a stable C ABI in =include/star_vector.h=; and
+- a Common Lisp client built with CFFI and CFFI-Grovel.
 
-* Repository shape
+The initial backend performs exact exhaustive search. It supports cosine
+similarity, dot product, Euclidean distance, and Manhattan distance. Similarity
+scores sort high-to-low; distances sort low-to-high; equal scores are ordered by
+document ID.
 
-#+begin_src text
-roam/research/      findings, source review, open questions
-roam/design/        implementation-ready designs
-roam/implement/     one active implementation per project
-roam/indexes/       project indexes and roadmaps
-scripts/            capture, promotion, status, sync, validation
-.github/workflows/  CI gates
-tests/              validator and workflow regression tests
-#+end_src
-
-The Org tree under =roam/= is the source of truth.
-
-* RAGE loop
-
-1. *Analyze*: inspect current state, sources, constraints, contradictions, and unknowns.
-2. *Gate*: record what evidence or approval is required before execution.
-3. *Execute*: perform only the bounded action admitted by the gate.
-4. *Evaluate*: record observed output, tests, failures, and new evidence.
-5. *Recurse*: update the state and begin the next loop from what actually happened.
-
-A green build is evidence. It is not approval by itself.
-
-* Start a project
-
-Create a research note:
+* Build and test
 
 #+begin_src sh
-python3 scripts/save-research.py \
-  --project example \
-  --title "First investigation" \
-  --description "What we need to establish" \
-  --draft
+nix develop
+nimble test
+nix flake check
+nix build
 #+end_src
 
-Promote a design into the implementation slot:
+The flake installs the CLI, shared library, C header, Nim sources, and Common
+Lisp ASDF system. Run the packaged CLI with =nix run=.
+
+* Command-line client
+
+Vectors are comma-separated decimal values and every operation states the fixed
+store dimension. The store is an atomic JSON snapshot and is suitable for one
+writer process at a time.
 
 #+begin_src sh
-python3 scripts/implement.py roam/design/example/example-design.org
+star-vector init vectors.json 3
+star-vector upsert vectors.json 3 document.json 1,0,0
+star-vector get vectors.json 3 doc:example
+star-vector search vectors.json 3 cosine 10 1,0,0
+star-vector delete vectors.json 3 doc:example
 #+end_src
 
-Record a terminal implementation result:
+=document.json= must contain a supported canonical StarIntel document. At
+minimum, a generic document has fields like:
 
-#+begin_src sh
-python3 scripts/mark-design.py implemented \
-  --project example \
-  --summary "Implemented the bounded slice" \
-  --file src/example \
-  --test "python3 -m unittest discover -s tests -v"
+#+begin_src json
+{
+  "id": "doc:example",
+  "dataset": "examples",
+  "dtype": "document",
+  "schemaVersion": "0.10.1"
+}
 #+end_src
 
-Validate the repository:
+* Nim library
+
+#+begin_src nim
+import star_vector
+
+let store = openVectorStore("vectors.json", 3)
+defer: store.close()
+
+store.upsertDocument(document, @[1.0'f32, 0.0'f32, 0.0'f32])
+let matches = store.search(@[1.0'f32, 0.0'f32, 0.0'f32], vmCosine, 10)
+#+end_src
+
+* C ABI
+
+Include =star_vector.h= and link =libstar_vector.so=. Store handles are opaque.
+Strings returned through =sv_get_document= and =sv_search_json= belong to the
+caller and must be released with =sv_string_free=. The pointer returned by
+=sv_last_error= remains owned by the library and is valid until the next call on
+that handle.
+
+#+begin_src c
+sv_store_t store = NULL;
+sv_open("vectors.json", 3, &store);
+sv_upsert_document(store, document_json, vector, 3);
+sv_search_json(store, query, 3, SV_METRIC_COSINE, 10, &results_json);
+sv_string_free(results_json);
+sv_close(store);
+#+end_src
+
+* Common Lisp client
+
+The ASDF system is =star-vector=. It Grovels the installed C header so sizes and
+constants come from the ABI rather than duplicated Lisp declarations. Point
+=STAR_VECTOR_LIBRARY= at the shared library when it is not in the platform
+loader path.
+
+#+begin_src lisp
+(asdf:load-system "star-vector")
+
+(star-vector:with-store (store "vectors.json" 3)
+  (star-vector:upsert-document store document-json #(1.0 0.0 0.0))
+  (star-vector:search store #(1.0 0.0 0.0) :cosine 10))
+#+end_src
+
+The search result is JSON so the ABI remains language-neutral and document
+payloads retain their canonical StarIntel representation.
+
+* StarIntel schema authority
+
+=schema/starintel-schema.lock.json= pins the canonical Star-Lang repository and
+commit. Check the local artifacts without a Star-Lang checkout using:
 
 #+begin_src sh
-python3 scripts/sync.py
+python3 scripts/sync-starintel-schema.py --check
+#+end_src
+
+Refreshing the pin requires an exact canonical checkout and the explicit
+=--canonical-root=, =--canonical-repository=, =--canonical-commit=, and
+=--release= arguments. The validator derives document types from the pinned
+portable manifest; it does not maintain an independent dtype registry.
+
+* RAGE workflow
+
+Research, approved design, and implementation evidence live under =roam/=. The
+repository validation scripts remain available for subsequent gated changes:
+
+#+begin_src sh
 python3 scripts/sync.py --check
 python3 scripts/validate-docs.py
-python3 -m unittest discover -s tests -p 'test_*.py' -v
 #+end_src
-
-* Document contract
-
-Substantive Org documents carry a stable ID, title, description, status, file tags, an approval table, and a changelog. Research notes must distinguish observed facts, inference, contradictions, and unresolved questions.
-
-Do not load the entire corpus into an agent context for ordinary focused work. Load the active note, direct links, relevant index, source, and tests. Repository-wide audits are the exception.
-
-* Template use
-
-When creating a new repository from this template:
-
-1. replace the project metadata in =rage.toml=;
-2. keep the RAGE workflow and gates unless the project explicitly changes them;
-3. delete example notes after the first real project index exists;
-4. keep generated output and secrets out of Git.
