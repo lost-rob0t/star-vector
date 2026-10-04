@@ -1,7 +1,7 @@
 [project]
-name = "replace-me"
-slug = "replace-me"
-public_url = ""
+name = "Star Vector"
+slug = "star-vector"
+public_url = "https://github.com/lost-rob0t/star-vector"
 
 [rage]
 method = "Recursive Analysis with Gated Execution"

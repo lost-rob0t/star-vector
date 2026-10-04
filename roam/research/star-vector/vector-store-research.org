@@ -1,0 +1,64 @@
+:PROPERTIES:
+:ID: eeaee8d5-b86f-4066-9602-c9fdf407af3f
+:END:
+#+TITLE: Vector Store Research
+#+CREATED: [2026-10-03 Sat 21:00]
+#+LAST_MODIFIED: [2026-10-03 Sat 21:00]
+#+ROAM_SCHEMA: org-roam-meta/v1
+#+ROAM_KIND: research
+#+ROAM_VISIBILITY: private
+#+CENSOR_PROFILE: strict
+#+SOURCE: https://github.com/lost-rob0t/star-vector/issues/1; nsaspy/star-lang@919833266723edc9bddb337d606f72ae25fb8ced
+#+AI_GENERATED: t
+#+AI_TAG: ai_b7656acfc3afbe30
+#+FILETAGS: :ai:ai_b7656acfc3afbe30:star-vector:nim:common-lisp:cffi:starintel:
+
+#+description: Evidence and constraints for the first Star Vector implementation.
+#+status: APPROVED
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Research | Auto-RAGE worker | APPROVED | Repository and schema authority inspected | Issue 1 and canonical commit 919833266723edc9bddb337d606f72ae25fb8ced |
+| Execution | Auto-RAGE worker | APPROVED | Bounded design and adversarial review recorded | Vector Store Design |
+
+* Objective
+
+Establish a small, testable Nim vector store with a stable C boundary and a Common Lisp client without duplicating StarIntel schema ownership.
+
+* Verified Facts
+
+- The repository was an empty RAGE template at commit =0546df3c41af1772ec199d26c632c930b37bb60a=.
+- StarIntel release =0.10.1= is pinned to =nsaspy/star-lang@919833266723edc9bddb337d606f72ae25fb8ced=.
+- The canonical release generator check and release-lock check both pass at that commit.
+- The generated schema contains per-document definitions and the portable manifest contains canonical document names.
+- Nim 2.2.12, SBCL, CFFI, CFFI Grovel, and FiveAM are available through the locked flake.
+
+* Inference
+
+- Exact linear search is the smallest correct first index. It supplies deterministic reference behavior against which approximate indexes can later be tested.
+- Schema and portable-manifest artifacts should be pinned and mechanically synchronized, then embedded in the library so consumers do not need a second runtime service.
+- A JSON-returning C ABI avoids exposing Nim layouts or allocator-owned aggregate structures.
+
+* Contradictions
+
+- The older sibling =starintel-doc.nim= checkout is pinned to the historical 0.9 schema and cannot validate the active 0.10.1 lowerCamelCase contract.
+- =sbcl.withPackages= currently fails under the pinned nixpkgs wrapper safety gate; direct SBCL package derivations work.
+
+* Unresolved Questions
+
+- Approximate nearest-neighbor indexing is intentionally deferred until the exact-search contract and benchmark corpus exist.
+- Cross-process concurrent writers are not part of this slice; atomic replacement protects completed writes, while callers must serialize writers.
+
+* Findings
+
+- Store complete StarIntel JSON alongside embeddings so search results preserve provenance and document identity.
+- Validate documents from canonical schema plus portable manifest instead of maintaining a hand-written dtype registry.
+- Support cosine similarity, dot product, Euclidean distance, and Manhattan distance with stable ID tie-breaking.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-03 | Recorded initial implementation research | Codex Auto-RAGE | Issue 1 and local authority checks |

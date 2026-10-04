@@ -1,0 +1,18 @@
+{
+  "authority_library": "org.starintel/core@1",
+  "canonical_commit": "919833266723edc9bddb337d606f72ae25fb8ced",
+  "canonical_key_style": "lowerCamelCase",
+  "canonical_repository": "nsaspy/star-lang",
+  "expansion_path": "specs/starintel/0.10.1/compatibility.json",
+  "local_portable_manifest_path": "schema/starintel-portable-manifest.json",
+  "local_schema_path": "schema/starintel-schema.json",
+  "manifest_path": "specs/starintel/0.10.1/schema-lock-manifest.json",
+  "release_lock_path": "specs/starintel/0.10.1/release-lock.json",
+  "release_version": "0.10.1",
+  "schema_path": "specs/starintel/0.10.1/generated/schema.json",
+  "schema_version": "0.10.1",
+  "sha256": {
+    "portable_manifest": "62c0117364e68457965b2335ef7a26925c5219b33e440c44cab88a25782102a3",
+    "schema": "d717e4e3d48fdbb52f3b1eb5c4bdc589d3d4fb37e2a5fb9411ced9e2e7c68a55"
+  }
+}
