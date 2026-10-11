@@ -18,11 +18,13 @@
         (tek9:close-database db))))
   (lmdb:with-env (env path :read-only t :if-does-not-exist :error :max-dbs 64)
     (let ((catalog (lmdb:get-db nil :env env :if-does-not-exist :error
-                                   :key-encoding :utf-8 :value-encoding :octets))
+                                   :key-encoding :octets :value-encoding :octets))
           (names nil) (inventory nil))
       (lmdb:with-txn (:env env :write nil)
         (lmdb:do-db (name value catalog)
-          (push name names)))
+          ;; Native LMDB catalog names lack the trailing NUL expected by the
+          ;; wrapper's :UTF-8 encoding. The fixture's DB names are ASCII.
+          (push (map 'string #'code-char name) names)))
       (dolist (name (sort names #'string<))
         (let ((db (lmdb:get-db name :env env :if-does-not-exist :error
                                    :key-encoding :octets :value-encoding :octets))
