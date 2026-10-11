@@ -92,6 +92,7 @@
                 -o build/test-c-api
               build/test-c-api
               python3 tests/storage_integration.py "$PWD/build/star-vector" "$PWD/build/libstar_vector.so"
+              python3 tests/metric_contract.py "$PWD/build/libstar_vector.so"
               STAR_VECTOR_CLI="$PWD/build/star-vector" bash tests/test_cli.sh
 
               STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" \

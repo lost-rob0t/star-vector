@@ -210,10 +210,11 @@ proc dotProduct(left, right: openArray[float32]): float64 =
 proc norm(vector: openArray[float32]): float64 =
   sqrt(dotProduct(vector, vector))
 
-proc metricValue(left, right: openArray[float32], metric: VectorMetric): float64 =
+proc metricValue(left, right: openArray[float32], metric: VectorMetric,
+                 leftNorm, rightNorm: float64): float64 =
   case metric
   of vmCosine:
-    result = dotProduct(left, right) / (norm(left) * norm(right))
+    result = dotProduct(left, right) / (leftNorm * rightNorm)
   of vmDot:
     result = dotProduct(left, right)
   of vmEuclidean:
@@ -239,12 +240,14 @@ proc search*(store: VectorStore, query: openArray[float32], metric: VectorMetric
   validateVector(query, store.dimensionCount)
   if limit < 0: fail("search limit cannot be negative")
   if limit == 0: return
-  if metric == vmCosine and norm(query) == 0.0:
+  let queryNorm = if metric == vmCosine: norm(query) else: 0.0
+  if metric == vmCosine and queryNorm == 0.0:
     fail("cosine similarity requires a non-zero query vector")
   var best = initHeapQueue[RankedResult]()
   template consider(recordId: string, record: VectorRecord) =
-    if metric != vmCosine or norm(record.vector) != 0.0:
-      let value = metricValue(query, record.vector, metric)
+    let recordNorm = if metric == vmCosine: norm(record.vector) else: 0.0
+    if metric != vmCosine or recordNorm != 0.0:
+      let value = metricValue(query, record.vector, metric, queryNorm, recordNorm)
       let rank = if metric in {vmCosine, vmDot}: -value else: value
       if best.len < limit or rank < best[0].rank or
          (rank == best[0].rank and recordId < best[0].item.id):

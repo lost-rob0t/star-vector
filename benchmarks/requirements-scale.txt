@@ -1,0 +1,6 @@
+# Benchmark-only dependencies; the product still imports the pinned Tek9 producer.
+numpy==2.3.5
+faiss-cpu==1.15.1
+sqlite-vec==0.1.9
+psutil==7.2.2
+requests==2.32.5
