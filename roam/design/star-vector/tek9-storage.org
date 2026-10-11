@@ -44,7 +44,7 @@ flush/close never rewrite them. Explicit migration validates the entire legacy
 snapshot first, preserving its original bytes, then writes to a different path.
 The legacy parser still uses memory proportional to the snapshot and is not an
 archive-scale streaming importer. Source fingerprint, dimensions, count and
-progress are transactional metadata. Each record and checkpoint commit together.
+progress are transactional metadata. Each bounded batch and checkpoint commit together.
 Incomplete destinations reject ordinary opens/mutations. Resume checks source
 identity and progress; readback verifies every record before publication.
 Competing migrators are fenced by expected progress. No automatic deletion or
@@ -87,3 +87,13 @@ Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed
 
 ** Notes
 - Locked Nix derivations evaluate; local build blocked by remote dependency downloads. Storage runtime and scale acceptance remain pending CI; no release or deployment.
+
+* Additional execution evidence
+
+- Nim 2.2.6 independent exhaustive-reference tests passed for all four metrics,
+  ties, zero vectors and detached result ownership.
+- Local C ABI and SBCL 2.5.2 CFFI transient-store/startup-failure tests passed.
+  The latter first exposed a signal-handler conflict; the shared library now
+  uses =-d:noSignalHandler= and thread-local SIGPIPE masking for pipe writes.
+- Initial native CI caught missing worker compiler and a non-EQL string
+  =defconstant=; both were repaired. Runtime storage acceptance remains pending.

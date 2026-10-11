@@ -70,6 +70,9 @@ let matches = store.search(@[1.0'f32, 0.0'f32, 0.0'f32], vmCosine, 10)
 * C ABI
 
 Include =star_vector.h= and link =libstar_vector.so=. Store handles are opaque.
+Build the shared library with =-d:noSignalHandler= (the flake does this) so it
+preserves the host runtime's signal handlers. Pipe writes mask SIGPIPE only on
+the calling thread.
 Strings returned through =sv_get_document= and =sv_search_json= belong to the
 caller and must be released with =sv_string_free=. The pointer returned by
 =sv_last_error= remains owned by the library and is valid until the next call on

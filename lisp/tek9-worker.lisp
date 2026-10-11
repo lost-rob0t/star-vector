@@ -4,7 +4,7 @@
 (in-package :star-vector-tek9)
 
 ;; Application adapter only: transactions, encoding and cursors belong to Tek9.
-(defconstant +meta+ "star-vector/meta")
+(defparameter +meta+ "star-vector/meta")
 (defun field (request key) (jsown:val request key))
 (defun reply (&rest pairs)
   (write-line (jsown:to-json (cons :obj pairs)))

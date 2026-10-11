@@ -7,6 +7,7 @@
     (star-vector:upsert-document
      store "{\"id\":\"doc:lisp-bridge\",\"dataset\":\"synthetic\",\"dtype\":\"document\",\"schemaVersion\":\"0.10.1\"}"
      #(1.0 0.0 0.0)))
+#+sbcl (sb-ext:gc :full t) ; The C library must preserve SBCL's signal handlers.
 ;; Verify that bridge startup failure reaches callers as a CFFI condition.
 (let ((worker (uiop:getenv "STAR_VECTOR_TEK9_WORKER")) (failed nil))
   (unwind-protect

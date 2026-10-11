@@ -20,6 +20,22 @@ proc stop*(backend: Tek9Backend) =
 proc send*(backend: Tek9Backend, request: JsonNode) =
   if backend.failed or backend.process.isNil:
     raise newException(IOError, "Tek9 worker is unavailable; reopen the store")
+  when defined(posix):
+    # A library must not replace its host's signal handlers. Block SIGPIPE only
+    # on this thread while writing; consume only a newly generated signal.
+    var pipeMask, oldMask, pending: Sigset
+    discard sigemptyset(pipeMask)
+    discard sigaddset(pipeMask, SIGPIPE)
+    if pthread_sigmask(SIG_BLOCK, pipeMask, oldMask) != 0:
+      raise newException(IOError, "Cannot protect Tek9 pipe write")
+    discard sigpending(pending)
+    let alreadyPending = sigismember(pending, SIGPIPE) == 1
+    defer:
+      if not alreadyPending:
+        var info: SigInfo
+        var timeout: Timespec
+        while sigtimedwait(pipeMask, info, timeout) == -1 and errno == EINTR: discard
+      discard pthread_sigmask(SIG_SETMASK, oldMask, pipeMask)
   try:
     backend.process.inputStream.writeLine($request)
     backend.process.inputStream.flush()
