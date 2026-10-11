@@ -20,7 +20,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: cachix/install-nix-action@v31
       - name: Check locked package and installed CLI, C ABI and Lisp clients
-        run: nix flake check --no-update-lock-file -L
+        run: |
+          set +e
+          nix flake check --no-update-lock-file -L > nix-flake-check.log 2>&1
+          check_status=$?
+          set -e
+          tail -n 250 nix-flake-check.log
+          exit "$check_status"
+      - name: Retain complete package check log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-flake-check-${{ matrix.runner }}
+          path: nix-flake-check.log
+          if-no-files-found: error
       - name: Export synthetic scale measurements
         run: |
           out=$(nix build --no-update-lock-file --no-link --print-out-paths)
@@ -39,6 +52,14 @@ jobs:
           path: memory-profile.json
       - name: Build and run app outside the checkout
         run: bash tests/flake-app.sh
+      - name: Export real-model client proof
+        run: |
+          out=$(nix build .#text-check --no-update-lock-file --no-link --print-out-paths)
+          cp "$out/evidence.json" text-client-proof.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: text-client-proof-${{ matrix.runner }}
+          path: text-client-proof.json
   rage:
     runs-on: ubuntu-latest
     steps:

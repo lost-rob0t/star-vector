@@ -35,7 +35,7 @@
   (tek9:put-bulk db (list (tek9:new-document :id (field request "id")
                                           :value (field request "record")))))
 (defun assert-ready (db)
-  (unless (equal (getf (header db) :state) "ready")
+  (unless (member (getf (header db) :state) '("ready" "ready-profiled") :test #'equal)
     (error "Migration incomplete; resume the explicit migration first.")))
 
 (defun existing-header (path)
@@ -54,16 +54,23 @@
     (lmdb:lmdb-not-found-error () nil)))
 
 (defun validate-header (meta request)
-  (unless (equal (getf meta :format) "star-vector/tek9/1")
+  (unless (member (getf meta :format) '("star-vector/tek9/1" "star-vector/tek9/2") :test #'equal)
     (error "Existing environment has no supported Star Vector header."))
+  (when (equal (getf meta :format) "star-vector/tek9/2")
+    (unless (and (equal (getf meta :state) "ready-profiled")
+                 (stringp (getf meta :embedding-profile))
+                 (plusp (length (getf meta :embedding-profile))))
+      (error "Profiled store header is invalid.")))
   (unless (= (getf meta :dimensions) (field request "dimensions"))
     (error "vector store dimension mismatch"))
   (let ((source (jsown:val-safe request "source")))
     (if source
         (unless (and (equal source (getf meta :source))
-                     (eql (field request "total") (getf meta :total)))
+                     (eql (field request "total")
+                          (if (equal (getf meta :state) "ready-profiled")
+                              (getf meta :migration-total) (getf meta :total))))
           (error "Migration source fingerprint/count mismatch or destination already in use."))
-        (unless (equal (getf meta :state) "ready")
+        (unless (member (getf meta :state) '("ready" "ready-profiled") :test #'equal)
           (error "Migration incomplete; resume the explicit migration first.")))))
 
 (defun open-store-locked (request path)
@@ -115,10 +122,31 @@
        (let ((meta (header db)))
          (ok (cons "count" (getf meta :count))
              (cons "next" (getf meta :next))
-             (cons "complete" (if (equal (getf meta :state) "ready") t :false)))))
+             (cons "complete" (if (member (getf meta :state) '("ready" "ready-profiled") :test #'equal) t :false)))))
       ((equal op "get")
        (let ((value (tek9:fetch* db (field request "id"))))
          (ok (cons "record" (or value :null)))))
+      ((equal op "profile")
+       (ok (cons "profile" (or (getf (header db) :embedding-profile) ""))))
+      ((equal op "bind-profile")
+       (tek9:with-write-transaction (db :database-names (list +meta+))
+         (assert-ready db)
+         (let* ((meta (header db)) (previous (getf meta :embedding-profile))
+                (profile (field request "profile")))
+           (cond (previous
+                  (unless (equal previous profile) (error "Embedding profile mismatch.")))
+                 ((plusp (getf meta :count))
+                  (error "Cannot bind embedding profile to a populated raw vector store."))
+                 (t (setf (getf meta :embedding-profile) profile
+                          (getf meta :format) "star-vector/tek9/2"
+                          ;; Preserve migration provenance for read-only replay,
+                          ;; but fence v1 PUBLISH, whose guard ignores the state.
+                          (getf meta :migration-total) (getf meta :total)
+                          (getf meta :total) nil
+                          ;; V1 workers already open on this store also refuse writes.
+                          (getf meta :state) "ready-profiled")
+                    (save-header db meta)))))
+       (ok))
       ((equal op "scan")
        ;; One snapshot, one decoded record at a time, no collected result list.
        (tek9:map-database db :map-fn
@@ -129,6 +157,10 @@
        (tek9:with-write-transaction (db :database-names (list +meta+))
          (assert-ready db)
          (let ((meta (header db)))
+           ;; Check under the producer's writer lock, including stale raw handles.
+           (unless (equal (or (getf meta :embedding-profile) "")
+                          (or (jsown:val-safe request "profile") ""))
+             (error "Embedding profile mismatch; bind a compatible empty store first."))
            (unless (tek9:fetch db (field request "id")) (incf (getf meta :count)))
            (put-record db request)
            (save-header db meta)))
@@ -165,10 +197,14 @@
       ((equal op "publish")
        (tek9:with-write-transaction (db :database-names (list +meta+))
          (let ((meta (header db)))
-           (unless (and (= (getf meta :next) (getf meta :total))
-                        (= (getf meta :count) (getf meta :total)))
-             (error "Migration is incomplete."))
-           (setf (getf meta :state) "ready") (save-header db meta)))
+           (cond ((equal (getf meta :state) "migrating")
+                  (unless (and (= (getf meta :next) (getf meta :total))
+                               (= (getf meta :count) (getf meta :total)))
+                    (error "Migration is incomplete."))
+                  (setf (getf meta :state) "ready") (save-header db meta))
+                 ((member (getf meta :state) '("ready" "ready-profiled") :test #'equal)
+                  nil) ; Replaying publication never reverses a later binding.
+                 (t (error "Unsupported publication state.")))))
        (ok))
       ((equal op "flush") (ok)) ; Every acknowledged write already commits :full.
       (t (error "Unknown storage operation: ~A" op)))))

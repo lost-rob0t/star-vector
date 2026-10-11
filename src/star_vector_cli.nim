@@ -1,4 +1,4 @@
-import std/[json, os, strutils]
+import std/[json, os, osproc, strutils]
 
 import star_vector
 
@@ -10,9 +10,13 @@ proc usage() {.noreturn.} =
   star-vector get STORE DIMENSIONS DOCUMENT_ID
   star-vector delete STORE DIMENSIONS DOCUMENT_ID
   star-vector search STORE DIMENSIONS METRIC LIMIT VECTOR
+  star-vector embedding-profile
+  star-vector embed-upsert STORE DOCUMENT_JSON
+  star-vector embed-search STORE METRIC LIMIT QUERY_TEXT_FILE
 
 VECTOR is a comma-separated list of numbers. METRIC is cosine, dot,
-euclidean, or manhattan.""")
+euclidean, or manhattan. DOCUMENT_JSON and QUERY_TEXT_FILE accept - for stdin.
+Text commands require the optional star-vector-text package.""")
   quit(2)
 
 proc positiveInteger(value, label: string): int =
@@ -31,6 +35,11 @@ proc parseVector(value: string): seq[float32] =
       result.add(parseFloat(item).float32)
     except ValueError:
       raise newException(ValueError, "invalid vector value: " & item)
+
+proc searchLimit(value: string): int =
+  try: result = parseInt(value)
+  except ValueError: raise newException(ValueError, "limit must be an integer")
+  if result < 0: raise newException(ValueError, "limit must be non-negative")
 
 proc parseMetric(value: string): VectorMetric =
   case value
@@ -59,6 +68,12 @@ proc encodedResults(results: seq[SearchResult], metric: VectorMetric): JsonNode 
 
 proc main() =
   let arguments = commandLineParams()
+  if arguments.len > 0 and arguments[0] in ["embedding-profile", "embed-upsert", "embed-search"]:
+    let child = startProcess(textHelperPath(), args = arguments,
+                             options = {poUsePath, poParentStreams})
+    let status = child.waitForExit()
+    child.close()
+    quit(status)
   if arguments.len < 3:
     usage()
 
@@ -85,11 +100,15 @@ proc main() =
     if arguments.len != 3:
       usage()
     store.flush()
-    echo $(%*{"format": (if fileExists(path): "star-vector/1" else: "star-vector/tek9/1"), "dimensions": dimensions})
+    let format = if fileExists(path): "star-vector/1"
+      elif store.embeddingProfile().kind != JNull: "star-vector/tek9/2"
+      else: "star-vector/tek9/1"
+    echo $(%*{"format": format, "dimensions": dimensions})
   of "upsert":
     if arguments.len != 5:
       usage()
-    store.upsertDocument(parseFile(arguments[3]), parseVector(arguments[4]))
+    let document = if arguments[3] == "-": parseJson(stdin.readAll()) else: parseFile(arguments[3])
+    store.upsertDocument(document, parseVector(arguments[4]))
     echo $(%*{"upserted": true})
   of "get":
     if arguments.len != 4:
@@ -103,7 +122,7 @@ proc main() =
     if arguments.len != 6:
       usage()
     let metric = parseMetric(arguments[3])
-    let limit = positiveInteger(arguments[4], "limit")
+    let limit = searchLimit(arguments[4])
     echo $encodedResults(store.search(parseVector(arguments[5]), metric, limit), metric)
   else:
     usage()

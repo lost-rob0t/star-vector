@@ -1,0 +1,17 @@
+{
+  "providerVersion": "3.8.16",
+  "model": "en_core_web_md",
+  "modelVersion": "3.8.0",
+  "wheelSha256": "5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310",
+  "source": "https://github.com/explosion/spacy-models/releases/tag/en_core_web_md-3.8.0",
+  "files": {
+    "config.cfg": "24b1b17065a74a6a3f999dd9c722f5532dc6bb5994b6a7ba5aa4f2ce09d434cc",
+    "meta.json": "5bcf739c5ac3b0038fc218d3227f8600e35a420e29fbe4c6bcc643688ab63b1b",
+    "tokenizer": "b014e8bba4958b120af2d0c1c63eabb7c00379f2bacaf10df7c5325efd2ea467",
+    "vocab/key2row": "1a1825f75ae9d691024317632021a49970ce61bcc007bc176f77ca429c3bcf5c",
+    "vocab/lookups.bin": "fce9c883c56165f29573cc938c2a1c9d417ac61bd8f56b671dd5f7996de70682",
+    "vocab/strings.json": "efd814b36290d2513b683c924571d9e3b25bf6c60bb89c13cb8c3436d2cb6cfa",
+    "vocab/vectors": "22d102290ba09bb681c5a2e6063e9b4cea4c41dec9517565181a907b6ba6a830",
+    "vocab/vectors.cfg": "ff4359091952c8cd16f1f0482f5770fb82d1707368d5cca3c46aa501f552e3c5"
+  }
+}

@@ -1,0 +1,130 @@
+:PROPERTIES:
+:ID: e735195c-92da-418c-a538-cd734e9ae1cd
+:END:
+#+title: Local document embeddings and language clients
+#+description: Canonical document text through a pinned local encoder into authoritative Tek9 storage.
+#+status: IMPLEMENTED
+#+filetags: :star-vector:embedding:client:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Scope and execution | User | APPROVED | Finish document embedding workflow and common language clients | Delegated continuation; issue 11 |
+| Implementation | Implementing agent | APPROVED | Inspected current interfaces and available pinned model | Observations and plan below |
+| Merge | Independent reviewer | PENDING | Final diff and real execution evidence | Draft PR 10 |
+
+* Observations
+
+The current Nim library, C ABI, CLI and Common Lisp CFFI accept raw vectors.
+No text provider exists in this repository or the inspected adjacent projects.
+Tek9 remains the imported, authoritative producer. Its write transaction can
+atomically enforce an optional immutable embedding profile in the existing
+application header. Existing raw-vector stores and explicit migration remain.
+
+Binding upgrades only an empty store's application header to format 2 and a
+distinct ready-profiled state. The existing v1 producer adapter rejects both
+fresh opens and writes from an already open handle, so older software cannot
+silently mix raw vectors into the newly profiled store. Normal unbound stores
+remain format 1. This is an application compatibility change, not a Tek9 fork.
+Binding also archives the original migration total and clears the legacy
+publication counter, because v1 publication does not check the ready state.
+Current publication only transitions migrating to ready; completed replay
+preserves a later profile binding and still validates the retained source.
+
+The selected nixpkgs revision provides spaCy 3.8.16. The official English
+en_core_web_md 3.8.0 wheel was retrieved from GitHub on 2026-10-11, SHA256
+5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310.
+Hugging Face and Google Storage artifact attempts returned proxy HTTP 403.
+This is a static English word-vector baseline, not a contextual transformer
+or evidence of domain retrieval quality. Use the producer's tokenizer and
+Doc.vector pooling API; do not recreate an encoder or storage implementation.
+
+* Execution plan
+
+Add an immutable, dimension-checked profile binding only for empty stores.
+Enforce binding and compatible writes in the same Tek9 transaction. An old
+raw handle must not write into a newly bound store. Preserve raw APIs for
+unbound stores, and add profile-aware C/Nim calls. No adoption of populated
+unbound stores, implicit reembedding, or legacy rewrite.
+
+Implement a reusable Python library over that C ABI. Extract rawContent
+verbatim, tokenize the complete accepted text, pool through spaCy Doc.vector,
+normalize in float64 and persist float32. Pin provider version and model
+artifact hashes; include dimensions, preprocessing, normalization and text
+extraction version in the profile. Reject empty/zero-vector or over-limit
+input explicitly. Preserve document ID, provenance and unrelated extensions;
+attach text digest and profile metadata in a reserved extension.
+
+Expose convenience commands through the existing CLI, with stdin support
+for text/documents. Add Common Lisp, Nim and JS/TS convenience clients using
+those commands, retaining existing native interfaces. Python supports an
+in-process reusable encoder/store. No daemon, network protocol, paid API or
+runtime model download. Package an optional text flake output with fixed
+model assets, leaving the lightweight numeric package usable independently.
+
+Validate synthetic deterministic profile/write/reopen/race/error behavior,
+all four metrics, and cross-language update/search/readback. Separately run
+the actual pinned model on synthetic prose, record exact versions, hashes,
+timings and limitations, and include reopen and abrupt process termination.
+Retain scale evidence and billion/history design without claiming new ANN
+implementation or billion-scale execution.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Admit local text workflow and shared language clients | Codex | Issue 11, source/API inspection and successful official model retrieval |
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 7c62ef26-dfa7-4f27-9def-329df3e51cf2
+:RECORDED_AT: 2026-10-11T16:07:08+00:00
+:END:
+
+** Summary
+Implement pinned local document embeddings, atomic immutable model profiles, and Common Lisp/Nim/Python/JavaScript-TypeScript clients over existing native and CLI interfaces.
+
+** Files
+- src/star_vector/store.nim
+- src/star_vector/c_api.nim
+- lisp/tek9-worker.lisp
+- clients/python/star_vector_client/text.py
+- clients/README.md
+- nix/text.nix
+
+** Tests
+- Five deterministic profile/metric/reopen/race/SIGKILL tests passed.
+- Real spaCy 3.8.16/en_core_web_md 3.8.0 300d proof passed four scalar metric oracles, all four language updates, new-encoder reopen and acknowledged-write SIGKILL recovery.
+- Nim, C ABI, Lisp, CLI, 400 persisted metric checks, streaming JSON, schema sync, 14 repository Python tests and TypeScript declarations passed locally.
+
+** Commits
+- None
+
+** Notes
+- Final-head native CI and independent review remain pending. Existing storage_integration suite is locally blocked by missing /proc process-children path after environment restore; no local pass is claimed.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 47342e26-c7a5-454a-bda0-a86630336ff9
+:RECORDED_AT: 2026-10-11T16:52:58+00:00
+:END:
+
+** Summary
+Preserve profile isolation across migration replay and stale v1 publication
+
+** Files
+- lisp/tek9-worker.lisp
+- tests/profile_v1_compatibility.py
+- flake.nix
+
+** Tests
+- Regression against frozen pre-fix worker fails because actual v1 publication bypasses binding; fixed worker passes stale current/v1 publication, v1 writes, fresh open and original-source preservation.
+- All five deterministic embedding tests passed after the fix.
+- Synthetic two-row migration passed partial checkpoint, unavailable staging, restart, completed replay, readback and source-byte preservation.
+
+** Commits
+- None
+
+** Notes
+- Independent review of 3380c7df requested changes for this reproduced P1. Final-head CI and independent rereview remain pending.

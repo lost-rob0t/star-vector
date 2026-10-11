@@ -1,0 +1,291 @@
+:PROPERTIES:
+:ID: f7b9656d-ab1d-4fda-b8d7-a1a808ece252
+:END:
+#+title: Measured embedding search scale and StarIntel storage limits
+#+description: Synthetic exact/ANN/database evidence, a validated cosine improvement, and explicit limits of the present Tek9-backed engine.
+#+status: MEASURED
+#+filetags: :star-vector:benchmark:cosine:starintel:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Scope and execution | User | APPROVED | Scale, database comparison and embedding correctness request | Issue 9 |
+| Small cosine optimization | Implementing agent | APPROVED | Independent oracle, ABBA equality and measured transient benefit | ABBA records in evidence bundle; design scale.org |
+| Billion-scale implementation | Implementing agent | NOT STARTED | Compatible generations, sharding, filtered retrieval and recovery implementation | Proposed tiered-search.org only |
+| Merge | Independent reviewer | PENDING | Final-head native checks and independent review | Draft PR 10 |
+
+* Verified Facts
+
+StarVector's four exact metrics remain correct against an independent scalar
+oracle, including reopened Tek9. Reusing the query norm and the candidate
+norm removes redundant cosine arithmetic without changing result IDs or
+float64 scores. It improves the transient path, but does not establish a
+persistent speedup. The current durable search still spends substantial time
+streaming, parsing and validating full records through the producer worker.
+
+The main matrix completed 57 cells, recorded one Qdrant readiness failure,
+and explicitly skipped three expensive Tek9 cells. It covers a 10k/50k/100k/1m
+ladder at 128 dimensions, a 50k dimension sweep at 384/768/1536, and a 100k
+uniform-random stress corpus. A separate larger Flat cell and matched ABBA
+checks supplement the matrix. These are synthetic execution results, not a
+tested-billion or production-readiness claim.
+
+The production engine still exposes exact cosine, dot, Euclidean and
+Manhattan only. Faiss Flat/HNSW/IVF/PQ and Qdrant are real external benchmark
+implementations, not newly exposed StarVector methods. Tek9 remains the
+imported authoritative producer. The numeric scale experiment changed no
+storage format, migration behavior, canonical schema pin, CLI command or ABI.
+The subsequent [[file:../../design/star-vector/document-embeddings.org][document embedding workflow]] adds profile-aware APIs and a
+v2 header for explicitly bound stores; its separate [[file:text-results.org][real-model proof]] does
+not turn this synthetic matrix into a text-ingestion or retrieval-quality
+benchmark.
+
+* Inspectable evidence and reproduction
+
+- [[file:../../../benchmarks/results/scale-2026-10-11/measurements.csv][All selected metric rows, sample counts, memory and disk figures]]
+- [[file:../../../benchmarks/results/scale-2026-10-11/raw-results.json.gz][Full compressed result JSON, including failures, lifecycle data and ABBA passes]]
+- [[file:../../../benchmarks/results/scale-2026-10-11/execution-ledger.json][Executed commands, resource admission estimates and skipped cells]]
+- [[file:../../../benchmarks/results/scale-2026-10-11/checksums.json][Evidence checksums]]
+- [[file:../../../benchmarks/results/scale-2026-10-11/dependencies.json][Actual numerical/client/server versions]]
+- [[file:../../../benchmarks/scale.py][Single-cell generator and runners]], [[file:../../../benchmarks/scale_matrix.py][serialized matrix]], [[file:../../../benchmarks/cosine_ab.py][matched ABBA runner]], [[file:../../../benchmarks/export_scale.py][evidence exporter]].
+
+The local machine reports Intel Xeon Platinum 8573C, five visible CPUs but a
+four-CPU cgroup quota, 16 GiB cgroup memory, Linux 6.18.44, Python 3.12.14 and
+about 23-27 GiB free disk over the experiments. Numerical libraries use one
+thread per query; four-client tests are separate. Qdrant has four maximum
+search threads within the same shared machine quota. This is a shared
+execution environment, not an isolated latency certification host.
+
+Pins: Faiss CPU 1.15.1, SQLite-vec 0.1.9, NumPy 2.3.5, and Qdrant 1.16.3
+from immutable image digest
+=sha256:0425e3e03e7fd9b3dc95c4214546afe19de2eb2e28ca621441a56663ac6e1f46=.
+The actual server binary hash is recorded. No Qdrant local-client emulation
+was substituted. Local StarVector libraries use Nim 2.2.12, release, ORC,
+threads, =noSignalHandler= and =useMalloc=. Local producer execution uses
+SBCL 2.5.2; native Nix validation uses the committed flake dependencies.
+Tek9 remains pinned at =e6d1cb86a2e268a894eae3acae9617238b2adcff=.
+
+Generate deterministic float32 data with seed 1729. There are 256 latent
+clusters, independent Gaussian query noise and non-unit input magnitudes;
+the uniform stress distribution removes the clusters. IDs, dataset, revision,
+root ID, collection time, provenance, embedding metadata and about 1 KiB of
+raw content are canonical synthetic StarIntel documents. The filler is highly
+compressible and does not model real evidence-content storage ratios. Bucket
+filters and latent clusters are correlated by the deterministic ID schedule.
+
+The oracle computes cosine in float64 over the original float32 inputs,
+in bounded row/query blocks with deterministic ID ties. It evaluates the
+eligible corpus first, at 100%, 10%, 1%, 0.1% and empty eligibility. Sixty-four
+tuning queries are disjoint from 1000 test queries. Faiss tuning seeks 95%
+unfiltered recall over a finite parameter grid; failure to reach that target
+is retained. Filter evaluations retain that unfiltered setting to expose its
+limits, rather than silently increasing work for the test set. Their sample
+count is 100. Exact database scans use only three measured queries where
+cost demands it; their p99 values in raw data are explicitly unsupported.
+
+The matrix ran before the usage interruption completed; saved results were
+recovered without repeating completed cells. Supplemental ABBA/larger-cell
+checks ran after recovery on the same reported CPU model and resource quota.
+Most rows include per-file driver hashes and query/binary hashes. Early 10k
+rows predate that instrumentation. An early 10k PQ pass reranked using the
+normalized float32 query; its raw evidence is retained but superseded in the
+summary by a pass using the original float32 query in float64 reranking.
+Pre-matrix dtype/setup probes are excluded from this report.
+
+* Million-row cosine results: algorithm and transient paths
+
+[[file:../../../benchmarks/results/scale-2026-10-11/latency.png]]
+
+All rows below use 1m x 128, k=10 and the same clustered corpus/queries.
+Faiss returns candidate IDs; the transient C ABI also handles result JSON
+and canonical document payloads. This is not a persistence comparison.
+
+| Method | p50 ms | p95 ms | p99 ms | Recall@10 | Queries | Build/ingest s | Serialized index MiB |
+|--------+--------+--------+--------+-----------+---------+----------------+----------------------|
+| Faiss Flat IP, normalized copies | 37.084 | 45.540 | 70.179 | 1.0000 | 1000 | 0.84 | 488.28 |
+| Faiss HNSW, M=16 | 0.336 | 0.757 | 3.935 | 0.9634 | 1000 | 249.58 | 625.86 |
+| Faiss IVF-flat | 0.244 | 0.613 | 2.436 | 0.9786 | 1000 | 15.73 | 496.41 |
+| Faiss IVF-PQ, 16-byte code + 100-candidate rerank | 0.712 | 2.878 | 4.158 | 0.2584 | 1000 | 26.80 | 23.51 |
+| StarVector transient exact | 970.587 | not supported | not supported | 1.0000 | 20 | 75.09 | no persistent index |
+
+The small PQ index is not a successful quality tradeoff at these settings:
+exact reranking cannot recover neighbors omitted from the candidate set.
+The timings do not show that HNSW or IVF is universally optimal. At 100k
+uniform-random vectors, the tested maximum settings reached only 54.8%
+HNSW recall, 58.56% IVF-flat recall and 34.5% PQ/rerank recall. Training and
+candidate budgets must be validated on the actual embedding distribution.
+
+The selected larger stress cell was Faiss Flat at 2m x 128. All 1000 query
+results matched the oracle; p50/p95/p99 were 91.730/199.719/232.823 ms.
+Index construction took 1.963 s, the serialized index was 1,024,000,045 bytes,
+and sampled peak summed RSS/PSS were about 2989.2/2988.5 MiB. Ground-truth
+generation took 104.24 s. Actual free disk before the search cell was about
+21.9 GiB. This extends only the exact library measurement to two million;
+it is not a two-million-row StarVector durable or ANN validation. Larger
+full-database/index combinations were not executed in this task.
+
+* Database/API results and durability differences
+
+SQLite is embedded, StarVector uses C ABI plus Tek9 worker JSON, and Qdrant
+uses loopback HTTP JSON. Every database query returns document payloads.
+These end-to-end measurements include different transports and validation
+paths; do not attribute the Qdrant HTTP latency to its ANN kernel or compare
+it directly with Faiss library latency. No gRPC comparison was executed.
+
+| Database cell | Ingest/build s | Search p50 ms | Queries | Recall@10 | On-disk MiB |
+|---------------+----------------+---------------+---------+-----------+-------------|
+| StarVector/Tek9 10k x 128 | 29.50 | 4257.72 | 3 | 1.0 | 78.53 |
+| StarVector/Tek9 50k x 128 | 89.27 | 4493.68 | 3 | 1.0 | 392.36 |
+| StarVector/Tek9 100k x 128 | 140.83 | 8644.36 | 3 | 1.0 | 784.64 |
+| StarVector/Tek9 50k x 384 | 104.18 | 14780.26 | 3 | 1.0 | see CSV |
+| SQLite-vec 1m x 128 | 35.04 | 236.48 | 1000 | 1.0 | 2477.51 |
+| Qdrant 1m x 128 | readiness timeout | not measured | 0 | not measured | not exported |
+
+StarVector ingress validates each document and commits one row per durable
+C ABI call. SQLite uses 128-row WAL/FULL transactions; Qdrant uses 128-point
+wait=true requests. Those transaction sizes and durability acknowledgments
+are unequal and explicit. Ingest rates are not an apples-to-apples storage
+kernel contest. SQLite/Qdrant do not run the canonical Nim schema validator.
+Build timing includes normalization/training/add for Faiss and ingestion plus
+index readiness for Qdrant. A warm scan follows build and limited warmup.
+
+Qdrant's million-row attempt lasted 666.38 seconds. At the 300-second
+readiness deadline it reported 1m points and 1m indexed vectors, but yellow
+optimizer status. Cleanup succeeded. The result is a readiness-budget failure,
+not evidence that Qdrant cannot store or search 1m vectors. No queries were
+measured for that cell and no missing timings are inferred from smaller cells.
+
+The runner skipped Tek9 1m x 128, 50k x 768 and 50k x 1536 because conservative
+linear scheduling estimates from observed smaller cells exceeded its 1200 s
+per-cell budget. These are unexecuted cells, not OOM failures or measured
+maximum capacities. The complete dimension sweep still ran for Faiss,
+StarVector transient, SQLite-vec and Qdrant. Larger real embeddings and a
+billion active rows remain untested.
+
+* Filtering, concurrent reads and snapshot/write behavior
+
+At 100k x 128, IVF-flat's unfiltered recall was 1.0 with nprobe=4, but recall
+fell to 0.752 at 1% eligibility and 0.119 at 0.1%. The eligible-ID selector
+was applied inside IVF search; these misses are not a postfilter artifact.
+Qdrant and SQLite reached full recall in the measured 50k filter cells.
+The harness did not exercise native filters for Faiss Flat/HNSW; their
+unsupported rows do not imply those libraries lack such facilities.
+StarVector itself has no predicate API yet. Empty eligible sets return empty
+results in supported measured paths. No invalid/duplicate/ineligible IDs were
+reported by completed cells.
+
+The 50k Tek9 reopen took 1.022 s; its first query took 4.472 s and matched
+the oracle. Four independent readers executed 12 queries with full recall,
+median query latency 10.760 s and wall throughput 0.349 queries/s, including
+handle startup. This small concurrency sample does not support a p99 claim.
+Qdrant process restart and SQLite connection reopen also passed their count/
+query checks. All of these retain OS cache; true cold-cache eviction was not
+verified and no true-cold result is claimed.
+
+Holding a 50k-row producer read snapshot while overwriting 1000 rows preserved
+the original revision for every streamed record. Snapshot duration was
+4.786 s. LMDB file size grew by 36,757,504 bytes while the reader was pinned;
+the same subsequent overwrite count after release added zero file bytes.
+Pinned-write p50/p99 were 1.559/3.914 ms versus 1.226/2.559 ms after release.
+This measures producer snapshot/write overlap and page reuse, not query
+scoring latency during a continuously varying arrival-rate workload.
+
+The ordinary 50k mutation cells updated and deleted 100 rows each. Tek9 took
+0.136/0.097 s, SQLite 0.114/0.079 s and Qdrant 0.192/0.159 s for update/delete
+totals. SQLite verified the reduced count after reconnect. Qdrant's mutation
+count check is separate from its earlier process-restart test. Existing native
+integration checks cover worker loss, in-flight transaction crash rollback,
+reopen, concurrent clients, migration restart and source/readback preservation.
+
+* Memory, disk and write accounting
+
+RSS/PSS and anonymous/file-backed residency are sampled every 100 ms across
+the driver and live children. Reported peaks are observed samples, not proven
+maximum bounds. RSS can double-count shared pages; PSS apportions them.
+File-backed RSS can include anonymous COW pages, so those classifications
+must not be added together. The Faiss driver retains normalization staging
+and the source memory map, and PQ retains originals for reranking; process
+memory is not the same as serialized index size.
+
+| Cell | Peak summed RSS MiB | Peak PSS MiB | Anonymous MiB | File RSS MiB |
+|------+---------------------+--------------+---------------+--------------|
+| Faiss Flat 1m x 128 | 1516.8 | 1514.0 | 1004.1 | 514.9 |
+| Faiss HNSW 1m x 128 | 1673.9 | 1671.1 | 1160.9 | 515.2 |
+| Faiss IVF-PQ 1m x 128 | 1095.6 | 1092.8 | 582.6 | 516.9 |
+| StarVector transient 1m x 128 | 6606.8 | 6604.0 | 6108.8 | 499.6 |
+| SQLite-vec 1m x 128 | 615.2 | 612.4 | 116.5 | 500.4 |
+| StarVector/Tek9 100k x 128 | 995.3 | 991.7 | 128.0 | 870.7 |
+
+The 50k Tek9 lifecycle cell additionally opens four readers: its summed peak
+RSS was 2615.8 MiB while peak PSS was 949.2 MiB. Do not compare that peak
+with a one-handle row as if the workload were identical. A large resident LMDB
+mapping does not demonstrate whole-store heap hydration.
+
+The raw evidence retains per-process Linux I/O counters. For the 50k lifecycle
+cells, observed kernel write_bytes were about 2.540 GB across Tek9 workers,
+0.320 GB for SQLite and 0.567 GB across Qdrant server processes. The Tek9 cell
+also includes 2000 extra snapshot-experiment overwrites. These counters are
+sampled and include WAL/page maintenance and multiple phases, not just ingest.
+They are not device-level write amplification or fsync equivalence. Parent
+counters can inherit waited-child I/O: summing parent and child maxima would
+double-count. On-disk bytes are logical file lengths, including WAL where
+present, not necessarily allocated filesystem blocks. These constraints
+prevent claiming a directly comparable physical write-amplification factor.
+
+* Inference
+
+Process-isolated ABBA comparisons used 100 independently checked queries per
+pass. Baseline/candidate medians were 29.693/28.110 versus 18.171/18.871 ms
+at 50k x 128, and 248.388/256.504 versus 148.759/142.314 ms at 50k x 1536.
+The averages of the two process medians improved about 36% and 42%. Every
+pass produced the same ID-and-score digest. The 10k persistent ABBA medians
+varied from 839 to 1376 ms and did not establish a persistent improvement.
+
+Retain this narrow exact optimization and the independent contract tests.
+For meaningful persistent acceleration, the next slice needs a producer-backed
+consistent snapshot/change boundary, compact candidate data and generation-
+qualified exact reranking. Test HNSW/IVF choices and eligible-set fallback on
+actual model embeddings before selecting an index. The current PQ settings
+are not an acceptable substitute merely because the code bytes are smaller.
+
+The [[file:../../design/star-vector/tiered-search.org][active/history design]] separates logical validity, latest/as-of revisions
+and tombstones from physical placement. It specifies compatibility keys,
+rebuildable generation manifests and Tek9 authority. Billion float32 vectors
+alone need 512 GB at 128 dimensions or 6.144 TB at 1536, before documents,
+indexes, history or replication. Shards, history APIs, DiskANN, distributed
+recovery and ANN publication are proposed follow-up work, not implemented
+features in this PR.
+
+* Contradictions
+
+Reducing repeated cosine arithmetic did not establish a persistent latency
+gain: producer transport and full-record processing still dominate that path.
+The smallest tested PQ index had substantially worse recall, so code size
+alone does not select a useful method. High unfiltered recall did not carry
+over to selective IVF queries. Qdrant reported a million indexed vectors
+while its optimizer remained yellow; index count alone did not satisfy the
+experiment's readiness criterion. These observations are retained rather
+than resolved by relabeling failed or unexecuted cells as successes.
+
+* Unresolved Questions
+
+- Which real StarIntel embedding models, revision volumes and filter skews
+  should set acceptance targets for a production candidate provider?
+- What accuracy, index size and latency result from predicate-aware tuning,
+  larger candidate budgets, disk-oriented methods and gRPC transport?
+- How long does the million-row Qdrant optimizer need to reach the chosen
+  readiness state, and how does it perform after that point?
+- What are verified cold-cache costs and device-level write amplification
+  under matched transaction sizes and durability requirements?
+- What producer snapshot/change protocol and shard-generation lifecycle meet
+  active/history consistency requirements under crashes and concurrent updates?
+- What multi-host hardware, capacity and throughput are required for a billion
+  active vectors plus retained history? This machine cannot establish that.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Record recovered matrix, independent correctness, ABBA results and actual limits | Codex | Synthetic result bundle and native runs 38121343648 / 38122424201 |
+| 2026-10-11 | Scope numeric API/format stability to the scale experiment and distinguish the later text workflow | Codex | document-embeddings.org and text-results.org |

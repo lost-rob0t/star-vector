@@ -30,6 +30,7 @@ type
     closed: bool
     legacy: bool
     backend: Tek9Backend
+    profile: string
 
 const StoreFormat = "star-vector/1"
 
@@ -157,7 +158,57 @@ proc close*(store: VectorStore) =
     release(store.lock)
   deinitLock(store.lock)
 
-proc upsertDocument*(store: VectorStore, document: JsonNode, vector: openArray[float32]) =
+proc canonicalJson(value: JsonNode): JsonNode =
+  case value.kind
+  of JObject:
+    result = newJObject()
+    var keys: seq[string]
+    for key in value.keys: keys.add(key)
+    keys.sort()
+    for key in keys: result[key] = canonicalJson(value[key])
+  of JArray:
+    result = newJArray()
+    for item in value.items: result.add(canonicalJson(item))
+  else: result = value
+
+proc canonicalProfile(profile: string, dimensions: int): string =
+  let value = parseJson(profile)
+  if value.kind != JObject or not value.hasKey("format") or
+      value["format"].kind != JString or value["format"].getStr != "star-vector/embedding/1" or
+      not value.hasKey("dimensions") or value["dimensions"].kind != JInt or
+      value["dimensions"].getInt != dimensions:
+    fail("embedding profile format or dimension mismatch")
+  $canonicalJson(value)
+
+proc embeddingProfile*(store: VectorStore): JsonNode =
+  store.requireOpen()
+  acquire(store.lock)
+  try:
+    let profile = if store.backend.isNil: store.profile else:
+      store.backend.request(%*{"op": "profile"})["profile"].getStr
+    result = if profile.len == 0: newJNull() else: parseJson(profile)
+  finally:
+    release(store.lock)
+
+proc bindEmbeddingProfile*(store: VectorStore, profile: string) =
+  store.requireOpen()
+  if store.legacy: fail("legacy snapshot is read-only; cannot bind embedding profile")
+  let canonical = canonicalProfile(profile, store.dimensionCount)
+  acquire(store.lock)
+  try:
+    if store.backend.isNil:
+      if store.profile.len > 0:
+        if store.profile != canonical: fail("embedding profile mismatch")
+      elif store.records.len > 0:
+        fail("cannot bind embedding profile to a populated raw vector store")
+      else: store.profile = canonical
+    else:
+      discard store.backend.request(%*{"op": "bind-profile", "profile": canonical})
+  finally:
+    release(store.lock)
+
+proc upsertDocument*(store: VectorStore, document: JsonNode, vector: openArray[float32],
+                     embeddingProfile = "") =
   store.requireOpen()
   let checked = validateStarIntelDocument(document)
   if not checked.ok:
@@ -165,13 +216,17 @@ proc upsertDocument*(store: VectorStore, document: JsonNode, vector: openArray[f
   validateVector(vector, store.dimensionCount)
   if store.legacy: fail("legacy snapshot is read-only; use explicit migrate to a new destination")
   let record = VectorRecord(document: cloneDocument(document), vector: @vector)
+  let profile = if embeddingProfile.len == 0: "" else:
+    canonicalProfile(embeddingProfile, store.dimensionCount)
 
   acquire(store.lock)
   try:
     if store.backend.isNil:
+      if store.profile != profile: fail("embedding profile mismatch; bind a compatible empty store first")
       store.records[checked.id] = record
     else:
-      discard store.backend.request(%*{"op": "upsert", "id": storageKey(checked.id), "record": encodeRecord(record)})
+      discard store.backend.request(%*{"op": "upsert", "id": storageKey(checked.id),
+        "record": encodeRecord(record), "profile": profile})
   finally:
     release(store.lock)
 
@@ -210,10 +265,11 @@ proc dotProduct(left, right: openArray[float32]): float64 =
 proc norm(vector: openArray[float32]): float64 =
   sqrt(dotProduct(vector, vector))
 
-proc metricValue(left, right: openArray[float32], metric: VectorMetric): float64 =
+proc metricValue(left, right: openArray[float32], metric: VectorMetric,
+                 leftNorm, rightNorm: float64): float64 =
   case metric
   of vmCosine:
-    result = dotProduct(left, right) / (norm(left) * norm(right))
+    result = dotProduct(left, right) / (leftNorm * rightNorm)
   of vmDot:
     result = dotProduct(left, right)
   of vmEuclidean:
@@ -239,12 +295,14 @@ proc search*(store: VectorStore, query: openArray[float32], metric: VectorMetric
   validateVector(query, store.dimensionCount)
   if limit < 0: fail("search limit cannot be negative")
   if limit == 0: return
-  if metric == vmCosine and norm(query) == 0.0:
+  let queryNorm = if metric == vmCosine: norm(query) else: 0.0
+  if metric == vmCosine and queryNorm == 0.0:
     fail("cosine similarity requires a non-zero query vector")
   var best = initHeapQueue[RankedResult]()
   template consider(recordId: string, record: VectorRecord) =
-    if metric != vmCosine or norm(record.vector) != 0.0:
-      let value = metricValue(query, record.vector, metric)
+    let recordNorm = if metric == vmCosine: norm(record.vector) else: 0.0
+    if metric != vmCosine or recordNorm != 0.0:
+      let value = metricValue(query, record.vector, metric, queryNorm, recordNorm)
       let rank = if metric in {vmCosine, vmDot}: -value else: value
       if best.len < limit or rank < best[0].rank or
          (rank == best[0].rank and recordId < best[0].item.id):

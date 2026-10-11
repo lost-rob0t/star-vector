@@ -1,3 +1,3 @@
-import star_vector/[starintel, store]
+import star_vector/[starintel, store, text_client]
 
-export starintel, store
+export starintel, store, text_client

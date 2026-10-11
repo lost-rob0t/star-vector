@@ -1,0 +1,155 @@
+:PROPERTIES:
+:ID: f3b9c6e5-87dc-4abe-838b-6a16bfdfdb53
+:END:
+#+title: Scale evidence and compatible search methods
+#+description: Reproducible cosine and database comparisons, measured exact optimization, and active/history tier design.
+#+status: IMPLEMENTED
+#+filetags: :star-vector:scale:benchmark:search:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Scope and execution | User | APPROVED | Explicit scale, embedding and database comparison request | Delegated task; issue 9 |
+| Benchmark implementation | Implementing agent | APPROVED | Current architecture, resource and dependency inspection | Observations below |
+| Production optimization | Implementing agent | APPROVED | Matched ABBA transient measurements and unchanged result digests; no persistent speedup claim | verification/ab-50k128.json, ab-50k1536.json and ab-tek9-10k128.json |
+| Merge | Independent reviewer | PENDING | Final diff, native checks and reproducible results | Draft PR required |
+
+* Observed starting point
+
+Base =f993f88c276fa6b36f7c4eb17fd79dfe5c586ad8= uses imported Tek9 at
+=e6d1cb86a2e268a894eae3acae9617238b2adcff= as authoritative storage.
+Exact scans preserve a read transaction and O(k) ranking heap. Cosine, dot,
+Euclidean (not squared), and Manhattan are implemented. No ANN or metadata
+filter API exists. Cosine currently recomputes query and candidate norms.
+The local environment has a four-CPU quota, 16 GiB memory and about 27 GiB
+free disk; no 256 GB host is attached. Faiss 1.15.1 and SQLite-vec 0.1.9
+are installed. Qdrant 1.16.3 image was retrieved and digest recorded.
+
+* Execution plan
+
+Build independent float64 numerical and ID-order oracles over float32
+synthetic inputs. Include errors, zero vectors, non-unit embeddings, ties,
+all four metrics and persistent reopen. Separate index/kernel comparisons
+from database/API work, and report JSON, validation, transport and durability.
+Use a 128-dimensional 10k/50k/100k/1m ladder plus a fixed-size dimension sweep
+at 384/768/1536. Admit larger cells only from actual available resources;
+record time/resource limits and unexecuted cells. Deterministic generation,
+disjoint tuning/test queries and 1000 fast-method test queries support
+percentiles; slow exact database paths get explicitly smaller samples.
+
+Compare actual pinned Faiss Flat/HNSW/IVF/PQ and database baselines where
+execution succeeds, not reimplementations. Test filtered recall on the same
+eligible corpus; never substitute global top-k then filter. Report build,
+ingest/mutation/query, concurrency, process restart versus true cold cache,
+RSS/PSS/anonymous/file residency, serialized size and write accounting.
+Dependencies and synthetic results are reproducible artifacts; generated
+databases remain outside version control. Preserve CLI/C ABI/Lisp behavior.
+
+Select only a measured, small production improvement. New indexes, if any,
+must be rebuildable and snapshot/version consistent with authoritative Tek9.
+Design a compatible boundary for future methods without advertising them
+as implemented. Active means searchable and is independent of RAM placement;
+logical validity, latest/as-of revisions, provenance and tombstones are
+separate from hot/warm/cold placement. No tested-billion or production claim.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Admit reproducible scale experiments and independent metric checks | Codex | Issue 9, inspected source and resource limits |
+
+* Exact cosine optimization experiment gate
+
+The baseline C ABI over 50k x 128 transient rows passed all 1000 query ID
+oracles, with p50 30.35 ms and p95 33.74 ms. The 50k x 1536 cell passed
+100 query oracles at p50 261.60 ms. These preliminary timings include some
+overlapping setup work and are not the final paired performance claim.
+Source inspection shows four vector reductions per cosine candidate:
+zero-candidate norm, query norm, second candidate norm, and dot product.
+
+Admit the narrow experiment: compute the unchanged float64 query norm once
+per search and reuse the candidate norm computed for zero exclusion. Keep
+each reduction order, division expression, error behavior, ID ties and
+storage format unchanged. Retain only after independent numerical checks
+and sequential matched baseline/candidate runs. No persisted norm cache or
+ANN sidecar is introduced by this experiment.
+
+* Measured acceptance of norm reuse
+
+After the environment resumed, sequential process-isolated ABBA runs used
+the same compiler, synthetic inputs and baseline/candidate shared libraries.
+At 50k x 128, baseline medians were 29.693/28.110 ms and candidate medians
+18.171/18.871 ms. At 50k x 1536 they were 248.388/256.504 ms and
+148.759/142.314 ms. Each process checked 100 queries against the independent
+oracle. IDs and serialized float64 score digests were identical across all
+four passes at each dimension. The average of the two process medians fell
+about 36% and 42%, respectively. These are transient C ABI measurements,
+without the memory sampler, not evidence of a comparable persistent speedup.
+
+The 10k x 128 persistent ABBA run also preserved all result digests, but its
+five-query medians varied from 839 to 1376 ms. Candidate medians were about
+1363/1369 ms. This experiment does not establish a persistent latency gain;
+the producer/JSON/validation scan remains the dominant path. Retain the
+small arithmetic optimization because of its measured transient benefit,
+unchanged exact semantics and passing native integration checks, while
+reporting the storage bottleneck without a production-readiness claim.
+
+Native runs 38121343648 (4bd6ee6) and 38122424201 (57dead8) passed x86_64,
+aarch64 and RAGE checks. Both architectures ran the new 400-check persisted
+metric contract plus existing CLI/C ABI/Lisp, concurrency, crash and migration
+checks. Final-head checks and independent review remain required before merge.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: a2d7e9c1-10df-4110-9d31-0078828f0544
+:RECORDED_AT: 2026-10-11T07:25:30+00:00
+:END:
+
+** Summary
+Implement deterministic scale harness and independent four-metric oracle; cosine norm-reuse experiment under measurement.
+
+** Files
+- benchmarks/scale.py
+- benchmarks/scale_common.py
+- tests/metric_contract.py
+- src/star_vector/store.nim
+
+** Tests
+- 200 transient C ABI numerical/error checks passed on baseline and candidate.
+- Three benchmark oracle tests passed.
+
+** Commits
+- None
+
+** Notes
+- This terminal implementation loop does not claim finished scale evidence or optimization acceptance. Persistent/native validation, matrix execution and independent merge review remain pending.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 42005a9c-fcc5-4e52-9c2a-1ccb47c1c877
+:RECORDED_AT: 2026-10-11T15:32:11+00:00
+:END:
+
+** Summary
+Complete measured scale comparison, preserve failed/skipped cells, validate exact cosine reuse, and document Tek9-authoritative active/history design.
+
+** Files
+- benchmarks/scale.py
+- benchmarks/scale_lifecycle.py
+- benchmarks/scale_matrix.py
+- benchmarks/export_scale.py
+- benchmarks/cosine_ab.py
+- roam/research/star-vector/scale-results.org
+- roam/design/star-vector/tiered-search.org
+
+** Tests
+- 57 successful main-matrix cells, one Qdrant readiness failure and three explicit time-budget skips; supplemental 2m Flat matched all 1000 oracle queries.
+- ABBA exact IDs/scores identical; transient 50k medians improved about 36%/42% at 128/1536 dimensions. Persistent speedup not established.
+- 14 local Python tests passed, including benchmark fixture preservation. Prior source heads passed x86_64/aarch64 native 400-check contract plus existing integration suites.
+
+** Commits
+- None
+
+** Notes
+- No billion-row execution, ANN product API, cold-cache proof, device-level write-amplification ratio or deployment is claimed. Final-head CI and independent review remain pending.

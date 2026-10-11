@@ -35,6 +35,7 @@
             inherit pkgs lispPackages lispRegistry;
             source = self;
           };
+          text = import ./nix/text.nix { inherit pkgs lispPackages lispRegistry; source = self; vectorPackage = package; };
           package = pkgs.stdenv.mkDerivation {
             pname = "star-vector";
             version = "0.1.0";
@@ -92,6 +93,10 @@
                 -o build/test-c-api
               build/test-c-api
               python3 tests/storage_integration.py "$PWD/build/star-vector" "$PWD/build/libstar_vector.so"
+              python3 tests/metric_contract.py "$PWD/build/libstar_vector.so"
+              STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" python3 tests/embedding_integration.py
+              STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" \
+                python3 tests/profile_v1_compatibility.py "${memory-baseline}/lisp/tek9-worker.lisp" "$PWD/build/star-vector"
               STAR_VECTOR_CLI="$PWD/build/star-vector" bash tests/test_cli.sh
 
               STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" \
@@ -122,6 +127,8 @@
               lispRoot="$out/share/common-lisp/source/star-vector"
               mkdir -p "$lispRoot"
               cp lisp/*.lisp lisp/*.asd "$lispRoot/"
+              mkdir -p "$out/share/star-vector/clients"
+              cp -R clients/. "$out/share/star-vector/clients/"
               runHook postInstall
             '';
 
@@ -159,6 +166,10 @@
         {
           default = package;
           star-vector = package;
+          star-vector-text = text.textPackage;
+          python-client = text.pythonClient;
+          embedding-model = text.model;
+          text-check = text.check;
           tek9-worker = worker;
           memory-profile = import ./nix/memory-profile.nix {
             inherit pkgs lispPackages lispRegistry;
@@ -172,6 +183,7 @@
       checks = forAllSystems (system: {
         default = self.packages.${system}.default;
         memory = self.packages.${system}.memory-profile;
+        text = self.packages.${system}.text-check;
       });
 
       apps = forAllSystems (system: {
@@ -179,6 +191,11 @@
           type = "app";
           program = "${self.packages.${system}.default}/bin/star-vector";
           meta.description = "Star Vector command-line client";
+        };
+        text = {
+          type = "app";
+          program = "${self.packages.${system}.star-vector-text}/bin/star-vector";
+          meta.description = "Star Vector with pinned local document embeddings";
         };
       });
 

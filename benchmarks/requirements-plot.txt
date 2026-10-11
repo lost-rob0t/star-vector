@@ -1,0 +1,2 @@
+# Optional report figure generator, separate from product and benchmark runtimes.
+matplotlib==3.10.8
