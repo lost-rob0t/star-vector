@@ -53,6 +53,9 @@ int main(void) {
   assert(sv_open(path, 3, &store) == SV_OK);
   assert(sv_len(store) == 0);
   assert(sv_close(store) == SV_OK);
-  unlink(path);
+  char child[512];
+  snprintf(child, sizeof(child), "%s/data.mdb", path); unlink(child);
+  snprintf(child, sizeof(child), "%s/lock.mdb", path); unlink(child);
+  rmdir(path);
   return 0;
 }

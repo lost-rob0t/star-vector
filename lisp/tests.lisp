@@ -25,5 +25,5 @@
            (ensure (delete-document store "doc:lisp") "Document was not deleted")
            (ensure (= 0 (store-count store)) "Store was not empty after deletion"))
       (when (probe-file path)
-        (delete-file path))))
+        (uiop:delete-directory-tree (uiop:ensure-directory-pathname path) :validate t))))
   t)

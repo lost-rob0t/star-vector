@@ -4,6 +4,7 @@ import star_vector
 
 proc usage() {.noreturn.} =
   stderr.writeLine("""usage:
+  star-vector migrate SOURCE_JSON DESTINATION DIMENSIONS [MAX_RECORDS]
   star-vector init STORE DIMENSIONS
   star-vector upsert STORE DIMENSIONS DOCUMENT_JSON VECTOR
   star-vector get STORE DIMENSIONS DOCUMENT_ID
@@ -62,6 +63,11 @@ proc main() =
     usage()
 
   let command = arguments[0]
+  if command == "migrate":
+    if arguments.len notin {4, 5}: usage()
+    let limit = if arguments.len == 5: positiveInteger(arguments[4], "max records") else: high(int)
+    echo $migrateSnapshot(arguments[1], arguments[2], positiveInteger(arguments[3], "dimensions"), limit)
+    return
   let path = arguments[1]
   let dimensions = positiveInteger(arguments[2], "dimensions")
   let store = openVectorStore(path, dimensions)
@@ -72,7 +78,7 @@ proc main() =
     if arguments.len != 3:
       usage()
     store.flush()
-    echo $(%*{"format": "star-vector/1", "dimensions": dimensions})
+    echo $(%*{"format": "star-vector/tek9/1", "dimensions": dimensions})
   of "upsert":
     if arguments.len != 5:
       usage()

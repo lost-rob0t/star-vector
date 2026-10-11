@@ -133,6 +133,75 @@ bash tests/flake-app.sh
 Downstream consumers should pin this producer's immutable revision and consume
 ~packages.<system>.star-vector~ rather than copying its implementation.
 
+* Tek9 storage and explicit legacy migration
+
+Persistent paths now name dedicated Tek9/LMDB directories. The flake pins the
+producer =lost-rob0t/tek9@e6d1cb86a2e268a894eae3acae9617238b2adcff= and consumes
+=packages.<system>.tek9=. An application adapter imports the ASDF library in a
+private SBCL worker per persistent handle; Nim communicates over local pipes.
+This is a process boundary, not an in-process Nim import. There is no listening
+service. No Tek9 implementation is copied into Star Vector. Packaged binaries
+embed the immutable worker executable path. Source builds use
+=STAR_VECTOR_TEK9_WORKER= (set by =nix develop=).
+
+The CLI, C ABI and Lisp client retain their operation signatures and metric
+ordering. Acknowledged mutations use Tek9 =:full= transactions; LMDB coordinates
+writers across handles/processes. Each search streams a single read snapshot
+through a top-k heap. Scores retain the original float32-input/float64-arithmetic
+contract, with document-ID ties. Transient empty-path stores stay in memory.
+512-byte canonical IDs use an isolated hashed storage key, with full-ID collision
+checks before replacement or deletion. Such a collision fails without overwriting.
+
+Old =star-vector/1= JSON files remain readable and are never rewritten on open,
+flush or close. Writes to them fail with a migration instruction. To migrate:
+
+#+begin_src sh
+star-vector migrate old-vectors.json new-tek9-directory 384
+# Optional maximum records in this invocation, for checkpointed progress:
+star-vector migrate old-vectors.json new-tek9-directory 384 1000
+# Repeat the same source and destination to resume and verify readback.
+#+end_src
+
+The migration validates the complete legacy snapshot before touching the target.
+It retains the original file, binds progress to a SHA-1 source-byte fingerprint
+(change detection, not authenticity), dimensions and count, and commits bounded
+batches together with their checkpoints. Batches target 128 records / 1 MiB;
+one larger row is permitted to preserve the existing document contract. An
+incomplete target rejects ordinary opens. Competing migrators are fenced by the
+expected checkpoint. Publication follows full record/count readback and a second
+source fingerprint check. An existing unrelated or unmarked Tek9 store is refused.
+A crash before the initial header commit may leave an unmarked directory; choose
+a new destination rather than deleting or adopting unknown data automatically.
+
+** Measured limits and validation
+
+- Exact search still visits all records and validates each decoded document.
+  Work is O(N*d + N*log(k)); retained results are O(k), plus the largest record.
+  It is not an approximate index. Long snapshots can pin LMDB pages.
+- SBCL startup, JSON encoding/decoding, IPC, runtime heaps and mapped pages are
+  real costs. One worker belongs to each persistent handle. Keep handles open
+  across operations; migration batches do not launch a process per record.
+- The producer reserves a fixed 16 GiB virtual map by default; automatic growth
+  is not provided. Map-full failures abort the transaction and surface as errors.
+- Legacy loading/migration still parse the whole JSON snapshot in memory. There
+  is no claim of bounded-memory legacy import, constant total RSS, or power-loss
+  verification from a process-kill test.
+- EOF closes the worker. Normal close waits/reaps it; failed scans terminate it
+  so unread rows cannot corrupt subsequent replies. Worker loss fails the handle;
+  reopen and inspect state rather than retrying an ambiguous mutation blindly.
+  C operations return I/O errors and Lisp raises =star-vector-error=. Do not race
+  close with calls on the same C handle; caller ownership of handle lifetime remains.
+
+=tests/storage_integration.py= covers synthetic cross-language reopen, concurrent
+handles/processes, producer rollback, killed-worker errors, parent-exit cleanup,
+512-byte IDs, source preservation, interrupted/resumed migration and readback.
+=tests/test_search_reference.nim= compares all four metrics with an independent
+exhaustive reference. =benchmarks/storage_benchmark.py= reports separate native
+Tek9 scans, worker bridge scans, Nim searches, no-op IPC, startup/reopen, batch
+writes and parent/worker RSS at 1k/10k/50k synthetic rows. RSS includes mapped
+pages and runtime heaps. Native CI exports JSON artifacts; no benchmark threshold
+or production-readiness claim is implied by these sample sizes.
+
 * RAGE workflow
 
 Research, approved design, and implementation evidence live under =roam/=. The

@@ -21,6 +21,14 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - name: Check locked package and installed CLI, C ABI and Lisp clients
         run: nix flake check --no-update-lock-file -L
+      - name: Export synthetic scale measurements
+        run: |
+          out=$(nix build --no-update-lock-file --no-link --print-out-paths)
+          cp "$out/share/star-vector/storage-benchmark.json" storage-benchmark.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storage-benchmark-${{ matrix.runner }}
+          path: storage-benchmark.json
       - name: Build and run app outside the checkout
         run: bash tests/flake-app.sh
   rage:

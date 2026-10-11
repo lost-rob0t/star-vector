@@ -104,7 +104,11 @@
   (%sv-dimensions (store-pointer store)))
 
 (defun store-count (store)
-  (%sv-len (store-pointer store)))
+  (let* ((count (%sv-len (store-pointer store)))
+         (message (last-error-message store)))
+    (unless (zerop (length message))
+      (error 'star-vector-error :status +sv-error-io+ :message message))
+    count))
 
 (defun call-with-vector (vector function)
   (let* ((values (coerce vector 'vector))

@@ -1,0 +1,89 @@
+:PROPERTIES:
+:ID: 1a062650-2709-43ca-922d-1b2294ce5623
+:END:
+#+title: Imported Tek9 storage
+#+description: Pinned producer library, private worker bridge, streaming search and explicit snapshot migration.
+#+status: IMPLEMENTED
+#+filetags: :star-vector:tek9:storage:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Scope and execution | User | APPROVED | Explicit library integration instruction | Delegated request and issue 5 |
+| Design | Implementing agent | APPROVED | Actual producer API and failure boundaries | Source observations below |
+| Release | Maintainer | PENDING | Exact-head runtime tests and review | Draft PR; no merge authorized |
+
+* Verified facts (2026-10-11)
+
+Star Vector main 59e22b4 uses a Nim table and complete JSON replacement. Packaging
+PR 4 at bc76fb3 provides installed CLI/C/Lisp checks; this work is stacked on it.
+Tek9 e6d1cb86a2e268a894eae3acae9617238b2adcff exports an ASDF library through
+=packages.<system>.tek9=. Its public =put-bulk=, =fetch*=, =delete-document=,
+=with-write-transaction= and =map-database= cover this adapter. =map-database=
+decodes one entry at a time in one LMDB read transaction. Normal writes compose
+with outer transactions; non-local exits abort. =:full= requests data and metadata
+sync. LMDB serializes writers across processes. The map is fixed at 16 GiB by
+default; there is no automatic growth. =put= tracks changed IDs in memory;
+=put-bulk= without change tracking avoids that growth.
+
+* Decision and adversarial review
+
+Import the pinned library in a private SBCL worker per persistent handle, over
+local pipes. No listening service, storage reimplementation, or copied Tek9
+source. Existing producer exports suffice; no upstream patch is justified.
+Keep schema validation and all metric arithmetic in Nim. Cursor results are
+streamed into a bounded top-k heap with ID tie-breaking. One search holds a read
+snapshot; slow readers pin LMDB pages. Worker startup, IPC, JSON and full record
+decoding have costs that must be measured. Worker failure invalidates its handle;
+never retry an ambiguous mutation automatically.
+
+New paths are dedicated Tek9 directories. Empty-path transient stores retain
+the memory backend. Existing JSON files are read-only through the legacy reader;
+flush/close never rewrite them. Explicit migration validates the entire legacy
+snapshot first, preserving its original bytes, then writes to a different path.
+The legacy parser still uses memory proportional to the snapshot and is not an
+archive-scale streaming importer. Source fingerprint, dimensions, count and
+progress are transactional metadata. Each record and checkpoint commit together.
+Incomplete destinations reject ordinary opens/mutations. Resume checks source
+identity and progress; readback verifies every record before publication.
+Competing migrators are fenced by expected progress. No automatic deletion or
+overwrite of existing unrelated stores. Synthetic fixtures only.
+
+* Acceptance and remaining evidence
+
+CLI/C ABI/Lisp tests, process-kill/reopen, failed-write rollback, snapshot search
+ordering, legacy source preservation, interrupted/resumed migration, and
+measured scale/memory behavior. Machine power-loss durability is a producer
+guarantee, not a result established by process-kill tests. Retain draft status
+if any required build/test cannot be executed.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Record scoped integration design and gate | Codex | Issue 5; inspected producer and consumer source |
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 13984e6c-f523-423a-a892-5b2cd25fe1cc
+:RECORDED_AT: 2026-10-11T04:56:46+00:00
+:END:
+
+** Summary
+Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed migration; draft pending native storage/runtime acceptance.
+
+** Files
+- src/star_vector/store.nim
+- lisp/tek9-worker.lisp
+- tests/storage_integration.py
+
+** Tests
+- 8 repository Python tests passed locally
+- Nim 2.2.6 CLI and C ABI compilation passed locally
+
+** Commits
+- None
+
+** Notes
+- Locked Nix derivations evaluate; local build blocked by remote dependency downloads. Storage runtime and scale acceptance remain pending CI; no release or deployment.
