@@ -83,6 +83,10 @@ startup. The convenience clients favor a small shared interface and explicit
 local boundary; they are not evidence of high-throughput remote serving.
 The existing scale report and Tek9-authoritative tiered/history design remain
 applicable; no ANN implementation or history API is introduced here.
+Their synthetic numeric measurements predate this text workflow. Each text
+document carries a complete embedding profile in its reserved extension for
+portable provenance; that metadata and real text-size distributions require
+separate storage and ingestion measurements.
 
 * Contradictions
 

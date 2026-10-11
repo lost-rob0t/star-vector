@@ -34,8 +34,12 @@ tested-billion or production-readiness claim.
 The production engine still exposes exact cosine, dot, Euclidean and
 Manhattan only. Faiss Flat/HNSW/IVF/PQ and Qdrant are real external benchmark
 implementations, not newly exposed StarVector methods. Tek9 remains the
-imported authoritative producer. No storage format, migration behavior,
-canonical schema pin, CLI command or ABI changed.
+imported authoritative producer. The numeric scale experiment changed no
+storage format, migration behavior, canonical schema pin, CLI command or ABI.
+The subsequent [[file:../../design/star-vector/document-embeddings.org][document embedding workflow]] adds profile-aware APIs and a
+v2 header for explicitly bound stores; its separate [[file:text-results.org][real-model proof]] does
+not turn this synthetic matrix into a text-ingestion or retrieval-quality
+benchmark.
 
 * Inspectable evidence and reproduction
 
@@ -284,3 +288,4 @@ than resolved by relabeling failed or unexecuted cells as successes.
 | Date | Change | Author or actor | Evidence |
 |------+--------+-----------------+----------|
 | 2026-10-11 | Record recovered matrix, independent correctness, ABBA results and actual limits | Codex | Synthetic result bundle and native runs 38121343648 / 38122424201 |
+| 2026-10-11 | Scope numeric API/format stability to the scale experiment and distinguish the later text workflow | Codex | document-embeddings.org and text-results.org |
