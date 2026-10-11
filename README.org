@@ -116,6 +116,23 @@ Refreshing the pin requires an exact canonical checkout and the explicit
 =--release= arguments. The validator derives document types from the pinned
 portable manifest; it does not maintain an independent dtype registry.
 
+* Locked package validation
+
+CI checks the committed flake lock on native x86_64-linux and aarch64-linux
+runners. A declared output is verified only when its exact-head Nix job passes.
+The package's install check reuses the synthetic CLI, C ABI and Lisp fixtures
+outside the build tree against installed executables, headers, shared library
+and ASDF sources. The separate app smoke invokes ~nix run~ from a temporary
+directory with disposable synthetic documents and store state:
+
+#+begin_src sh
+nix flake check --no-update-lock-file -L
+bash tests/flake-app.sh
+#+end_src
+
+Downstream consumers should pin this producer's immutable revision and consume
+~packages.<system>.star-vector~ rather than copying its implementation.
+
 * RAGE workflow
 
 Research, approved design, and implementation evidence live under =roam/=. The
