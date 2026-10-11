@@ -49,6 +49,8 @@ let
     export PYTHONPATH="$PWD/clients/python"
     export CL_SOURCE_REGISTRY="${lispRegistry}:"
     export C_INCLUDE_PATH="$PWD/include"
+    # Surface packaged worker startup diagnostics before opaque C ABI calls.
+    printf '%s\n' '{"op":"close"}' | "$STAR_VECTOR_TEK9_WORKER"
     python tests/embedding_integration.py
     tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 tests/text_client_types.mts
     nim c --threads:on --mm:orc --path:src --out:test-text-client tests/test_text_client.nim
