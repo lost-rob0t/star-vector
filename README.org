@@ -110,6 +110,11 @@ payloads retain their canonical StarIntel representation.
 
 * Scale experiments and exact metric contract
 
+The [[file:roam/research/star-vector/scale-results.org][measured scale report]] includes the 10k/50k/100k/1m matrix, a selected
+2m Flat stress cell, filtered recall, database lifecycle evidence, full raw
+results and explicit failures/limits. It also reports the matched cosine
+optimization and separates transient arithmetic from persistent search costs.
+
 =tests/metric_contract.py= checks the actual C ABI against an independent
 scalar float64 oracle over float32 inputs, both transient and reopened Tek9.
 It covers cosine, dot, Euclidean and Manhattan, dimensions through 1536,

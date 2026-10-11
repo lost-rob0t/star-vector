@@ -1,0 +1,126 @@
+{
+  "numpy": "2.3.5",
+  "faiss-cpu": "1.15.1",
+  "sqlite-vec": "0.1.9",
+  "psutil": "7.2.2",
+  "requests": "2.32.5",
+  "urllib3": "2.8.0",
+  "certifi": "2026.7.22",
+  "charset-normalizer": "3.5.2",
+  "idna": "3.18",
+  "faiss_compile_options": "OPTIMIZE DD AVX2 AVX512 AVX512_SPR AVX512_VPOPCNT ",
+  "python": "3.12.14",
+  "qdrant": {
+    "version": "1.16.3",
+    "commit": "bd49f45a8a2d4e4774cac50fa29507c4e8375af2",
+    "image_digest": "sha256:0425e3e03e7fd9b3dc95c4214546afe19de2eb2e28ca621441a56663ac6e1f46",
+    "binary_sha256": "e7fe7540c434e6dca3a922f324455cf36af814660824ee3c598306ff369a9cb5"
+  },
+  "local_lisp_sources": {
+    "autoload": {
+      "commit": "98e6958511f5cd7e0bb222e822adf46702b4b028",
+      "origin": "https://github.com/melisgl/autoload.git"
+    },
+    "cl-conspack": {
+      "commit": "6e529d7b3a7223ef1bb5c7b9f18384ba67b50b09",
+      "origin": "https://github.com/conspack/cl-conspack.git"
+    },
+    "cl-reexport": {
+      "commit": "03ad7a0e7307e510b3b25a622d3c5f8a077879b4",
+      "origin": "https://github.com/takagi/cl-reexport.git"
+    },
+    "dref": {
+      "commit": "8c85a95ac1e306c8a90ca247f3c1f9eda15a9ed4",
+      "origin": "https://github.com/melisgl/dref.git"
+    },
+    "fast-io": {
+      "commit": "a4c5ad600425842e8b6233b1fa22610ffcd874c3",
+      "origin": "https://github.com/rpav/fast-io.git"
+    },
+    "ieee-floats": {
+      "commit": "9566ce8adfb299faef803d95736c780413a1373c",
+      "origin": "https://github.com/marijnh/ieee-floats.git"
+    },
+    "introspect-environment": {
+      "commit": "69a50ac84b4c23447521dfab008cc20e4bfbee82",
+      "origin": "https://github.com/Bike/introspect-environment.git"
+    },
+    "jsown": {
+      "commit": "4092b4fc1762560eee3afbbead46c3e4eb2b8dec",
+      "origin": "https://github.com/madnificent/jsown.git"
+    },
+    "lisp-namespace": {
+      "commit": "699fccb6727027343bb5fca69162a3113996edfc",
+      "origin": "https://github.com/guicho271828/lisp-namespace.git"
+    },
+    "lmdb": {
+      "commit": "f61791c63433f33b4478bd6416c1d3bb999b2d9d",
+      "origin": "https://github.com/melisgl/lmdb.git"
+    },
+    "mgl-pax": {
+      "commit": "d91517cf9b76a21e50d90968e4a80b685e22dd34",
+      "origin": "https://github.com/melisgl/mgl-pax.git"
+    },
+    "named-readtables": {
+      "commit": "9b774b51a08124c41881f10b30fb33425a3e6085",
+      "origin": "https://github.com/melisgl/named-readtables.git"
+    },
+    "osicat": {
+      "commit": "68732bd7ac69744303ac805e1bfbbbc02e49c0a3",
+      "origin": "https://github.com/osicat/osicat.git"
+    },
+    "parse-declarations": {
+      "commit": "88572641b55b29640937c42e40852d16b3f99376",
+      "origin": "https://github.com/ocicl/parse-declarations.git"
+    },
+    "parse-declarations-20240503-549aebb": {
+      "ocicl_version": "20240503-549aebb"
+    },
+    "parse-number": {
+      "commit": "cb9e48758a51ddf3296b56c41ce0006617b00916",
+      "origin": "https://github.com/sharplispers/parse-number.git"
+    },
+    "pythonic-string-reader": {
+      "commit": "47a70ba1e32362e03dad6ef8e6f36180b560f86a",
+      "origin": "https://github.com/smithzvk/pythonic-string-reader.git"
+    },
+    "serapeum": {
+      "commit": "1b3f333a9efedc993c927b064ac0f6d983996ba5",
+      "origin": "https://github.com/ruricolist/serapeum.git"
+    },
+    "split-sequence": {
+      "commit": "89a10b4d697f03eb32ade3c373c4fd69800a841a",
+      "origin": "https://github.com/sharplispers/split-sequence.git"
+    },
+    "static-vectors-20240624-3d9d89b": {
+      "ocicl_version": "20240624-3d9d89b"
+    },
+    "string-case": {
+      "commit": "718c761e33749e297cd2809c7ba3ade1985c49f7",
+      "origin": "https://github.com/pkhuong/string-case.git"
+    },
+    "trivia": {
+      "commit": "4383dd894f7c9861673aad78d8f09e5587bc9616",
+      "origin": "https://github.com/guicho271828/trivia.git"
+    },
+    "trivial-cltl2": {
+      "commit": "2ada8722dc1d7bae1f49832a2ca26b25b90055d3",
+      "origin": "https://github.com/Zulu-Inuoe/trivial-cltl2.git"
+    },
+    "trivial-file-size": {
+      "commit": "60fd1bf8c573c733a775580cb96abdaaa7413ba8",
+      "origin": "https://github.com/ruricolist/trivial-file-size.git"
+    },
+    "trivial-indent-20261007-b181b48": {
+      "ocicl_version": "20261007-b181b48"
+    },
+    "trivial-macroexpand-all": {
+      "commit": "933270ac7107477de1bc92c1fd641fe646a7a8a9",
+      "origin": "https://github.com/cbaggers/trivial-macroexpand-all.git"
+    },
+    "type-i": {
+      "commit": "4407a6852e76e795f697180dfb01749b49cc7b0c",
+      "origin": "https://github.com/guicho271828/type-i.git"
+    }
+  }
+}

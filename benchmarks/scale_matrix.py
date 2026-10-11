@@ -94,11 +94,10 @@ def main():
                         os.killpg(process.pid, signal.SIGKILL); process.wait()
                     row.update(status="timeout", reason="Cell exceeded recorded time budget; no result inferred")
             row["wall_seconds"] = time.perf_counter()-start
-            # This path is created by this cell solely from generated inputs.
-            # Keep every result/log, but release synthetic LMDB files between cells.
-            store = target.with_suffix(".tek9")
-            if store.is_dir():
-                shutil.rmtree(store)
+            # Healthy child exits clean only their exclusively-created temporary
+            # stores. Do not infer ownership of any neighboring path from a name.
+            if row["status"] == "timeout":
+                row["scratch_note"] = "Killed child may leave its new sv-* temporary directory; result files and unrelated paths are retained"
         with ledger.open("a") as stream:
             stream.write(json.dumps(row)+"\n")
         print(json.dumps(dict(event="end", **row)), flush=True)

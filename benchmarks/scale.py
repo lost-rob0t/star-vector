@@ -9,10 +9,12 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import socket
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 # Set before importing numerical runtimes. One thread per library query permits
 # a four-client experiment without accidentally requesting sixteen BLAS threads.
@@ -35,7 +37,8 @@ class Faiss:
         self.faiss = faiss
         faiss.omp_set_num_threads(1)
         self.version = faiss.__version__
-        self.path = args.output.with_suffix(".faiss")
+        self.temporary = tempfile.TemporaryDirectory(prefix="sv-faiss-", dir=args.output.parent)
+        self.path = Path(self.temporary.name) / "index.faiss"
         d = x.shape[1]
         self.name = args.method
         start = time.perf_counter()
@@ -115,7 +118,8 @@ class Faiss:
         return rows
 
     def close(self):
-        self.path.unlink(missing_ok=True)
+        if hasattr(self, "temporary"):
+            self.temporary.cleanup()
 
 
 class SQLiteVec:
@@ -126,7 +130,8 @@ class SQLiteVec:
         import sqlite_vec
         self.extension = sqlite_vec
         self.version = dict(extension=sqlite_vec.__version__, sqlite=sqlite3.sqlite_version)
-        self.path = args.output.with_suffix(".sqlite")
+        self.temporary = tempfile.TemporaryDirectory(prefix="sv-sqlite-", dir=args.output.parent)
+        self.path = Path(self.temporary.name) / "store.sqlite"
         self.dimensions = x.shape[1]
         self.db = self.connect()
         self.db.execute("PRAGMA journal_mode=WAL"); self.db.execute("PRAGMA synchronous=FULL")
@@ -168,9 +173,10 @@ class SQLiteVec:
                     bytes_after=self.path.stat().st_size)
 
     def close(self):
-        self.db.close()
-        for suffix in ("", "-wal", "-shm"):
-            Path(str(self.path) + suffix).unlink(missing_ok=True)
+        if hasattr(self, "db"):
+            self.db.close()
+        if hasattr(self, "temporary"):
+            self.temporary.cleanup()
 
 
 class Qdrant:
@@ -183,11 +189,18 @@ class Qdrant:
         self.base = args.qdrant.rstrip("/")
         self.process = None
         self.temporary = None
+        self.created = False
         if args.qdrant_binary:
+            if self.base != "http://127.0.0.1:16333":
+                raise ValueError("Owned Qdrant child requires the default loopback endpoint")
+            for port in (16333, 16334):
+                with socket.socket() as probe:
+                    probe.bind(("127.0.0.1", port))
             self.temporary = tempfile.TemporaryDirectory(prefix="sv-qdrant-", dir=args.output.parent)
             args.qdrant_storage = Path(self.temporary.name) / "storage"
             self.server_log = args.output.with_suffix(".server.log").open("w")
             env = os.environ | {"QDRANT__STORAGE__STORAGE_PATH": str(args.qdrant_storage),
+                                "QDRANT__SERVICE__HOST": "127.0.0.1",
                                 "QDRANT__SERVICE__HTTP_PORT": "16333", "QDRANT__SERVICE__GRPC_PORT": "16334",
                                 "QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS": "4", "QDRANT__TELEMETRY_DISABLED": "true"}
             self.launch = dict(args=[args.qdrant_binary], cwd=self.temporary.name, env=env, stdout=self.server_log, stderr=subprocess.STDOUT)
@@ -203,7 +216,7 @@ class Qdrant:
                     if time.monotonic() > deadline:
                         raise
                     time.sleep(0.1)
-        self.name = "sv_scale_" + str(os.getpid())
+        self.name = "sv_scale_" + uuid.uuid4().hex
         self.dimensions = x.shape[1]
         self.version = self.call("GET", "")
         self.settings = dict(hnsw_m=16, ef_construct=100, ef_search=128, payload_returned=True,
@@ -212,6 +225,7 @@ class Qdrant:
         start = time.perf_counter()
         self.call("PUT", "/collections/"+self.name, dict(vectors=dict(size=self.dimensions, distance="Cosine", on_disk=False),
                   on_disk_payload=True, hnsw_config=dict(m=16, ef_construct=100), optimizers_config=dict(indexing_threshold=1000)))
+        self.created = True
         self.call("PUT", f"/collections/{self.name}/index?wait=true", dict(field_name="bucket", field_schema="integer"))
         for offset in range(0, len(x), 128):
             points = [dict(id=i, vector=x[i].tolist(), payload=dict(bucket=i % 1000, document=metadata(i, self.dimensions))) for i in range(offset, min(offset+128, len(x)))]
@@ -265,7 +279,7 @@ class Qdrant:
 
     def close(self):
         try:
-            if hasattr(self, "name"):
+            if self.created:
                 self.call("DELETE", "/collections/"+self.name)
         finally:
             self.session.close()
@@ -280,7 +294,8 @@ class StarVector:
     version = "source recorded by runner"
     def __init__(self, args, x):
         self.client = Client(args.library)
-        self.path = str(args.output.with_suffix(".tek9")) if args.method == "tek9" else ""
+        self.temporary = tempfile.TemporaryDirectory(prefix="sv-tek9-", dir=args.output.parent) if args.method == "tek9" else None
+        self.path = str(Path(self.temporary.name) / "store") if self.temporary else ""
         self.durability = "Tek9 LMDB full; single-row C ABI ingress" if self.path else "none; transient memory only"
         self.lane = "c-abi-tek9-database" if self.path else "c-abi-transient"
         self.dimensions = x.shape[1]
@@ -316,7 +331,8 @@ class StarVector:
     def close(self):
         if hasattr(self, "handle"):
             self.client.check(self.client.lib.sv_close(self.handle))
-        # Persisted synthetic paths are retained for explicit reopen/concurrency experiments.
+        if self.temporary:
+            self.temporary.cleanup()
 
 
 def run(args):
@@ -417,7 +433,7 @@ def main():
     bench = sub.add_parser("run")
     bench.add_argument("--data", type=Path, required=True); bench.add_argument("--output", type=Path, required=True)
     bench.add_argument("--backend", choices=["faiss", "sqlite", "qdrant", "starvector"], required=True)
-    bench.add_argument("--method", default="flat"); bench.add_argument("--queries", type=int, default=1000)
+    bench.add_argument("--method"); bench.add_argument("--queries", type=int, default=1000)
     bench.add_argument("--library"); bench.add_argument("--qdrant", default="http://127.0.0.1:16333")
     bench.add_argument("--server-pid", type=int)
     bench.add_argument("--qdrant-storage", type=Path)
@@ -427,6 +443,15 @@ def main():
     if args.command == "generate":
         print(json.dumps(generate(args.data, args.records, args.dimensions, args.queries, args.distribution)))
     else:
+        allowed = {"faiss": ("flat", "hnsw", "ivf", "pq"), "sqlite": ("default",),
+                   "qdrant": ("default",), "starvector": ("transient", "tek9")}
+        args.method = args.method or allowed[args.backend][0]
+        if args.method not in allowed[args.backend]:
+            parser.error(f"Unsupported {args.backend} method: {args.method}")
+        if args.queries <= 0:
+            parser.error("--queries must be positive")
+        if args.backend == "starvector" and not args.library:
+            parser.error("StarVector requires --library")
         if args.output.exists():
             parser.error("output already exists; keep prior evidence and choose a new path")
         try:

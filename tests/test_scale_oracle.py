@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 HAS_NUMPY = importlib.util.find_spec("numpy") is not None and importlib.util.find_spec("psutil") is not None
@@ -53,6 +54,21 @@ class OracleTests(unittest.TestCase):
             oracle(x, np.zeros_like(q))
         with self.assertRaises(ValueError):
             oracle(np.array([[float("nan"), 0]], dtype=np.float32), q)
+
+    @unittest.skipUnless(importlib.util.find_spec("sqlite_vec"), "optional SQLite-vec extension not installed")
+    def test_sqlite_fixture_never_adopts_or_removes_neighboring_file(self):
+        from scale import SQLiteVec
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / "result.json"
+            neighbor = output.with_suffix(".sqlite")
+            neighbor.write_bytes(b"unrelated existing data")
+            vectors = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float32)
+            backend = SQLiteVec(SimpleNamespace(output=output), vectors)
+            try:
+                self.assertEqual(backend.query(vectors[0])[0], 0)
+            finally:
+                backend.close()
+            self.assertEqual(neighbor.read_bytes(), b"unrelated existing data")
 
 
 if __name__ == "__main__":
