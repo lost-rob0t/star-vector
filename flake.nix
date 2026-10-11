@@ -37,6 +37,7 @@
             strictDeps = true;
             dontConfigure = true;
             doCheck = true;
+            doInstallCheck = true;
 
             buildPhase = ''
               runHook preBuild
@@ -97,6 +98,28 @@
               mkdir -p "$lispRoot"
               cp lisp/*.lisp lisp/*.asd "$lispRoot/"
               runHook postInstall
+            '';
+
+            installCheckPhase = ''
+              runHook preInstallCheck
+              sourceRoot="$PWD"
+              mkdir -p "$TMPDIR/installed-check"
+              cd "$TMPDIR/installed-check"
+              export XDG_CACHE_HOME="$TMPDIR/installed-cache"
+              export CL_SOURCE_REGISTRY="${lispRegistry}:"
+              STAR_VECTOR_CLI="$out/bin/star-vector" bash "$sourceRoot/tests/test_cli.sh"
+              $CC -std=c11 -Wall -Wextra -Werror -I"$out/include" \
+                "$sourceRoot/tests/test_c_api.c" -L"$out/lib" \
+                -Wl,-rpath,"$out/lib" -o test-installed-c-api
+              ./test-installed-c-api
+              STAR_VECTOR_LIBRARY="$out/lib/libstar_vector.so" \
+                C_INCLUDE_PATH="$out/include" \
+                sbcl --noinform --non-interactive --no-userinit --no-sysinit \
+                  --eval '(require :asdf)' \
+                  --eval "(asdf:load-asd (truename \"$out/share/common-lisp/source/star-vector/star-vector.asd\"))" \
+                  --eval '(asdf:test-system "star-vector/tests")'
+              cd "$sourceRoot"
+              runHook postInstallCheck
             '';
 
             meta = {

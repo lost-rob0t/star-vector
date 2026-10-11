@@ -8,6 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  nix:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: cachix/install-nix-action@v31
+      - name: Check locked package and installed CLI, C ABI and Lisp clients
+        run: nix flake check --no-update-lock-file -L
+      - name: Build and run app outside the checkout
+        run: bash tests/flake-app.sh
   rage:
     runs-on: ubuntu-latest
     steps:
