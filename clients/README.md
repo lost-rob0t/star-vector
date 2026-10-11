@@ -156,6 +156,10 @@ Binding upgrades only that empty store's application header to
 open; previously running v1 workers also reject mutations at their ready-state
 check. Use the current library to read or search a profile-bound store. Existing
 unbound stores retain their v1 header and behavior.
+Binding also disables the legacy migration-publication guard while retaining
+the original source fingerprint and checkpoint/count as provenance. Replaying
+a completed empty migration performs source/readback checks without undoing the
+profile binding; a stale v1 publication attempt fails before changing the store.
 
 Document identity, provenance, revision fields and unrelated extensions survive
 text ingestion. The reserved `extensions["star-vector.embedding"]` holds the

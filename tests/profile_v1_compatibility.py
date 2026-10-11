@@ -30,27 +30,57 @@ def request(worker, value):
     return json.loads(line)
 
 
-def main(source):
+def check_store(source, cli, migrated):
     with tempfile.TemporaryDirectory(prefix="star-vector-v1-profile-") as root:
-        first, second = old_worker(source), None
+        path = str(Path(root) / "store")
+        snapshot = Path(root) / "source.json"
+        original = b'{"format":"star-vector/1","dimensions":3,"records":[]}'
+        if migrated:
+            snapshot.write_bytes(original)
+            subprocess.run([cli, "migrate", str(snapshot), path, "3"], check=True,
+                           capture_output=True, text=True, timeout=30)
+        first, second, publisher = old_worker(source), None, None
         try:
-            assert request(first, dict(op="open", path=root, dimensions=3))["ok"]
-            with Store(root, 3) as current:
-                current.bind_profile(dict(format="star-vector/embedding/1", dimensions=3, provider="test-fixture"))
+            assert request(first, dict(op="open", path=path, dimensions=3))["ok"]
+            # Open the current publisher before binding to exercise a stale
+            # publication connection, not just a fresh format check.
+            publisher = subprocess.Popen([os.environ["STAR_VECTOR_TEK9_WORKER"]], text=True,
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.DEVNULL)
+            assert request(publisher, dict(op="open", path=path, dimensions=3))["ok"]
+            with Store(path, 3) as current:
+                profile = dict(format="star-vector/embedding/1", dimensions=3, provider="test-fixture")
+                current.bind_profile(profile)
+                response = request(first, dict(op="publish"))
+                assert response["ok"] is False, ("v1 publish bypassed binding", response)
+                assert request(publisher, dict(op="publish"))["ok"]
+                if migrated:
+                    replay = subprocess.run([cli, "migrate", str(snapshot), path, "3"], check=True,
+                                            capture_output=True, text=True, timeout=30)
+                    assert json.loads(replay.stdout)["complete"] is True
+                    assert snapshot.read_bytes() == original
+                assert current.profile == profile
                 record = dict(document=dict(id="synthetic", dataset="synthetic", dtype="document", schemaVersion="0.10.1"), vector=[1, 0, 0])
                 response = request(first, dict(op="upsert", id="synthetic", record=json.dumps(record)))
                 assert response["ok"] is False, response
                 assert len(current) == 0
                 second = old_worker(source)
-                response = request(second, dict(op="open", path=root, dimensions=3))
+                response = request(second, dict(op="open", path=path, dimensions=3))
                 assert response["ok"] is False and "supported Star Vector header" in response["error"], response
                 assert len(current) == 0
+            with Store(path, 3) as reopened:
+                assert reopened.profile == profile and len(reopened) == 0
         finally:
-            for worker in [first, second]:
+            for worker in [first, second, publisher]:
                 if worker is not None:
                     worker.communicate(timeout=10)
                     assert worker.returncode == 0
-    print("PASS: actual pinned v1 worker rejects stale writes and fresh opens of a profiled store")
 
 
-if __name__ == "__main__": main(sys.argv[1])
+def main(source, cli):
+    for migrated in [False, True]:
+        check_store(source, cli, migrated)
+    print("PASS: profile isolation survives migration replay, stale publication and actual v1 writes/opens")
+
+
+if __name__ == "__main__": main(sys.argv[1], sys.argv[2])

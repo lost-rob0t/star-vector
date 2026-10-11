@@ -43,7 +43,7 @@ def main():
                "samples", "p50_ms", "p95_ms", "p99_ms", "p99_supported", "qps_serial", "id_recall", "tie_recall", "invalid_results",
                "build_seconds", "disk_bytes", "peak_rss_kib", "peak_pss_kib", "peak_anonymous_kib", "peak_file_rss_kib", "status"]
     with (args.output / "measurements.csv").open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=columns); writer.writeheader()
+        writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n"); writer.writeheader()
         for item in results:
             if not item["included_in_summary"]:
                 continue

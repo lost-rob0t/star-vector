@@ -90,6 +90,18 @@ separate storage and ingestion measurements.
 
 * Contradictions
 
+Independent review of 3380c7df reproduced a migration/profile isolation bug:
+replaying an empty migration reset ready-profiled to ready, breaking fresh
+open and allowing a previously open v1 worker to insert raw vectors. Current
+publication now changes only migrating to ready. Explicit profile binding
+archives the original migration total and clears the legacy publication
+counter, so the actual v1 publisher cannot reset the state either. The source
+fingerprint/checkpoint and original file remain intact; completed replay is
+read-only after validation. The new regression failed against the pre-fix
+worker and passed with the fix for both ordinary and empty migrated stores,
+including stale current/v1 publication, v1 upsert, and fresh reopen. Final-head
+native checks and independent rereview are still required.
+
 Native x86_64 CI at 1f16a919 passed the numeric package, including the existing
 crash/concurrency/migration suite that was locally blocked. The separate text
 derivation exposed an ASDF registry collision. Diagnostic run 38154963175 at
@@ -128,3 +140,4 @@ production-readiness claim is made.
 | Date | Change | Author or actor | Evidence |
 |------+--------+-----------------+----------|
 | 2026-10-11 | Record real pinned model and shared language-client proof separately from deterministic fixtures | Codex | tests/text_clients.py, tests/embedding_integration.py and retained proof JSON |
+| 2026-10-11 | Record independent migration/profile finding and executed regression fix | Codex | tests/profile_v1_compatibility.py and PR 10 review |

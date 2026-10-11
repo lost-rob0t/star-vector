@@ -27,6 +27,10 @@ distinct ready-profiled state. The existing v1 producer adapter rejects both
 fresh opens and writes from an already open handle, so older software cannot
 silently mix raw vectors into the newly profiled store. Normal unbound stores
 remain format 1. This is an application compatibility change, not a Tek9 fork.
+Binding also archives the original migration total and clears the legacy
+publication counter, because v1 publication does not check the ready state.
+Current publication only transitions migrating to ready; completed replay
+preserves a later profile binding and still validates the retained source.
 
 The selected nixpkgs revision provides spaCy 3.8.16. The official English
 en_core_web_md 3.8.0 wheel was retrieved from GitHub on 2026-10-11, SHA256
@@ -99,3 +103,28 @@ Implement pinned local document embeddings, atomic immutable model profiles, and
 
 ** Notes
 - Final-head native CI and independent review remain pending. Existing storage_integration suite is locally blocked by missing /proc process-children path after environment restore; no local pass is claimed.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 47342e26-c7a5-454a-bda0-a86630336ff9
+:RECORDED_AT: 2026-10-11T16:52:58+00:00
+:END:
+
+** Summary
+Preserve profile isolation across migration replay and stale v1 publication
+
+** Files
+- lisp/tek9-worker.lisp
+- tests/profile_v1_compatibility.py
+- flake.nix
+
+** Tests
+- Regression against frozen pre-fix worker fails because actual v1 publication bypasses binding; fixed worker passes stale current/v1 publication, v1 writes, fresh open and original-source preservation.
+- All five deterministic embedding tests passed after the fix.
+- Synthetic two-row migration passed partial checkpoint, unavailable staging, restart, completed replay, readback and source-byte preservation.
+
+** Commits
+- None
+
+** Notes
+- Independent review of 3380c7df requested changes for this reproduced P1. Final-head CI and independent rereview remain pending.

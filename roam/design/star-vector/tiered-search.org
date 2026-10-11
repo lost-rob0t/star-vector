@@ -20,8 +20,10 @@ The product imports the pinned Tek9 producer and stores validated StarIntel
 0.10.1 documents plus float32 vectors. Its exact cosine/dot/Euclidean/Manhattan
 search streams a single LMDB read snapshot, decodes and validates every row,
 and retains O(k) results. It has no metadata predicate, ANN index, partition
-router, revision history API or model-compatibility enforcement beyond vector
-dimension. An upsert replaces the same ID. Current LMDB maps have a fixed
+router or revision history API. The optional document workflow now enforces
+an immutable embedding profile within a single store; cross-shard/index
+generation compatibility remains part of this proposal. An upsert replaces
+the same ID. Current LMDB maps have a fixed
 16 GiB virtual size. These facts rule out calling the current implementation
 a tested billion-active system. The benchmark's Faiss and Qdrant methods are
 external experiments, not newly exposed StarVector API methods.

@@ -66,7 +66,9 @@
   (let ((source (jsown:val-safe request "source")))
     (if source
         (unless (and (equal source (getf meta :source))
-                     (eql (field request "total") (getf meta :total)))
+                     (eql (field request "total")
+                          (if (equal (getf meta :state) "ready-profiled")
+                              (getf meta :migration-total) (getf meta :total))))
           (error "Migration source fingerprint/count mismatch or destination already in use."))
         (unless (member (getf meta :state) '("ready" "ready-profiled") :test #'equal)
           (error "Migration incomplete; resume the explicit migration first.")))))
@@ -137,6 +139,10 @@
                   (error "Cannot bind embedding profile to a populated raw vector store."))
                  (t (setf (getf meta :embedding-profile) profile
                           (getf meta :format) "star-vector/tek9/2"
+                          ;; Preserve migration provenance for read-only replay,
+                          ;; but fence v1 PUBLISH, whose guard ignores the state.
+                          (getf meta :migration-total) (getf meta :total)
+                          (getf meta :total) nil
                           ;; V1 workers already open on this store also refuse writes.
                           (getf meta :state) "ready-profiled")
                     (save-header db meta)))))
@@ -191,10 +197,14 @@
       ((equal op "publish")
        (tek9:with-write-transaction (db :database-names (list +meta+))
          (let ((meta (header db)))
-           (unless (and (= (getf meta :next) (getf meta :total))
-                        (= (getf meta :count) (getf meta :total)))
-             (error "Migration is incomplete."))
-           (setf (getf meta :state) "ready") (save-header db meta)))
+           (cond ((equal (getf meta :state) "migrating")
+                  (unless (and (= (getf meta :next) (getf meta :total))
+                               (= (getf meta :count) (getf meta :total)))
+                    (error "Migration is incomplete."))
+                  (setf (getf meta :state) "ready") (save-header db meta))
+                 ((member (getf meta :state) '("ready" "ready-profiled") :test #'equal)
+                  nil) ; Replaying publication never reverses a later binding.
+                 (t (error "Unsupported publication state.")))))
        (ok))
       ((equal op "flush") (ok)) ; Every acknowledged write already commits :full.
       (t (error "Unknown storage operation: ~A" op)))))

@@ -96,7 +96,7 @@
               python3 tests/metric_contract.py "$PWD/build/libstar_vector.so"
               STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" python3 tests/embedding_integration.py
               STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" \
-                python3 tests/profile_v1_compatibility.py "${memory-baseline}/lisp/tek9-worker.lisp"
+                python3 tests/profile_v1_compatibility.py "${memory-baseline}/lisp/tek9-worker.lisp" "$PWD/build/star-vector"
               STAR_VECTOR_CLI="$PWD/build/star-vector" bash tests/test_cli.sh
 
               STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" \

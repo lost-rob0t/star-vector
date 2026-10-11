@@ -9,6 +9,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/star-vector-matplotlib")
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+matplotlib.rcParams["svg.hashsalt"] = "star-vector-scale-v1"
 
 
 def main():
@@ -39,7 +40,10 @@ def main():
              "Different payload/transport/durability costs: compare lanes cautiously. Qdrant 1m readiness failed; Tek9 1m was skipped. No billion-row test.", ha="center", fontsize=8)
     fig.tight_layout(rect=(0, 0.10, 1, 0.95))
     fig.savefig(args.results / "latency.png", dpi=170)
-    fig.savefig(args.results / "latency.svg", metadata={"Date": None})
+    svg = args.results / "latency.svg"
+    fig.savefig(svg, metadata={"Date": None})
+    # Matplotlib emits padded path lines. Keep generated text diff-clean.
+    svg.write_text("\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n")
     print(f"Generated latency.png and latency.svg with matplotlib {matplotlib.__version__}")
 
 
