@@ -52,6 +52,7 @@ Rerun native x86_64/aarch64 checks and request independent review before merge.
 |------+--------+-----------------+----------|
 | 2026-10-11 | Record profiling-first scope and acceptance gates | Codex | Issue 7; merged source inspection |
 | 2026-10-11 | Fix benchmark-image packaging after native CI exposed stripped appended SBCL cores; production tests passed before this benchmark startup failure | Codex | Job 114404141635; dontStrip in profiling variants |
+| 2026-10-11 | Fix sampler result variable overwritten by the final counter loop; add a regression that preserves multi-handle results; omit unavailable per-mapping PSS subdivisions | Codex | Job 114404528904; test_memory_profile.py |
 
 * IMPLEMENTED RAGE Execution Record
 :PROPERTIES:

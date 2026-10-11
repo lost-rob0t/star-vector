@@ -19,6 +19,7 @@ from storage_integration import Client, children, document
 COUNT, DIMENSIONS, K = 50000, 128, 10
 QUERY = [1.0] + [0.0] * (DIMENSIONS - 1)
 FIELDS = ("Rss", "Pss", "Pss_Anon", "Pss_File", "Anonymous", "Private_Dirty", "Shared_Clean")
+MAPPING_FIELDS = tuple(key for key in FIELDS if key not in ("Pss_Anon", "Pss_File"))
 
 
 def memory(pid, mappings=False):
@@ -39,10 +40,10 @@ def memory(pid, mappings=False):
                     category = ("lmdb" if path.endswith("/data.mdb") else
                                 "worker_image" if "star-vector-tek9-worker" in path else
                                 "other_file" if path.startswith("/") else "anonymous_mapping")
-                    group = groups.setdefault(category, {key + "_kib": 0 for key in FIELDS})
+                    group = groups.setdefault(category, {key + "_kib": 0 for key in MAPPING_FIELDS})
                 elif group is not None:
                     key, _, value = line.partition(":")
-                    if key in FIELDS: group[key + "_kib"] += int(value.split()[0])
+                    if key in MAPPING_FIELDS: group[key + "_kib"] += int(value.split()[0])
             result["mappings"] = groups
     except FileNotFoundError:
         pass
@@ -69,14 +70,14 @@ def measured(pids, operation):
     thread.start()
     started = time.perf_counter()
     try:
-        value = operation()
+        operation_result = operation()
     finally:
         seconds = time.perf_counter() - started
         stop.set(); thread.join()
     for pid in [os.getpid(), *pids]:
         for key, value in memory(pid).items():
             peaks[str(pid)][key] = max(peaks[str(pid)].get(key, 0), value)
-    return value, dict(seconds=seconds, sampled_peaks=peaks, steady=capture(pids))
+    return operation_result, dict(seconds=seconds, sampled_peaks=peaks, steady=capture(pids))
 
 
 def events(directory, pid):
