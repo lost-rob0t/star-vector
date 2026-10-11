@@ -17,7 +17,8 @@
 * Verified facts (2026-10-11)
 
 Star Vector main 59e22b4 uses a Nim table and complete JSON replacement. Packaging
-PR 4 at bc76fb3 provides installed CLI/C/Lisp checks; this work is stacked on it.
+PR 4 at bc76fb3 provides installed CLI/C/Lisp checks. Its main merge b2cd4f4 was
+incorporated into this feature branch; draft PR 6 now targets main.
 Tek9 e6d1cb86a2e268a894eae3acae9617238b2adcff exports an ASDF library through
 =packages.<system>.tek9=. Its public =put-bulk=, =fetch*=, =delete-document=,
 =with-write-transaction= and =map-database= cover this adapter. =map-database=
@@ -63,6 +64,7 @@ if any required build/test cannot be executed.
 | Date | Change | Author or actor | Evidence |
 |------+--------+-----------------+----------|
 | 2026-10-11 | Record scoped integration design and gate | Codex | Issue 5; inspected producer and consumer source |
+| 2026-10-11 | Record native acceptance and synthetic scale measurements | Codex | Run 38114387574 at 0c244fedba0030af851bbba27a66885cf31389db |
 
 * IMPLEMENTED RAGE Execution Record
 :PROPERTIES:
@@ -100,4 +102,45 @@ Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed
   allocator lifecycle calls. Individual handles require serialized access;
   independent handles have a concurrent integration test.
 - Initial native CI caught missing worker compiler and a non-EQL string
-  =defconstant=; both were repaired. Runtime storage acceptance remains pending.
+  =defconstant=; both were repaired. Native acceptance is recorded below.
+
+* Native acceptance evidence
+
+[[https://github.com/lost-rob0t/star-vector/actions/runs/38114387574][Run 38114387574]] passed at
+=0c244fedba0030af851bbba27a66885cf31389db= on x86_64-linux and aarch64-linux.
+Both executed the locked Nix build, original Nim/CLI/C/Lisp suites, independent
+four-metric search oracle, integration tests, installed clients, and the app
+outside the checkout. The integration suite verified concurrent independent C
+handles on foreign threads, concurrent CLI writers, C/Lisp/CLI reopen, worker
+loss and parent-exit cleanup, failed-batch rollback, and process termination
+inside a producer transaction containing both data and migration progress.
+Legacy migration tests verified source preservation, checkpoint resume, full
+readback, changed-source rejection, and rejection of invalid/unrelated inputs.
+The eight repository Python tests and documentation/schema gates passed.
+
+Full-durability synthetic samples: 128 dimensions, 1 KiB document payload, k=10.
+Times are seconds; RSS is MiB, sampled every 5 ms during search. These are single
+CI samples, not latency distributions or machine power-loss tests.
+
+| Architecture | Rows | Native scan | Bridge scan | Search | Parent RSS | Worker RSS |
+|--------------+------+-------------+-------------+--------+------------+------------|
+| x86_64 | 1,000 | 0.012 | 0.047 | 0.032 | 29.8 | 123.5 |
+| x86_64 | 10,000 | 0.079 | 0.191 | 0.194 | 29.9 | 160.0 |
+| x86_64 | 50,000 | 0.290 | 1.002 | 1.026 | 30.0 | 553.9 |
+| aarch64 | 1,000 | 0.020 | 0.056 | 0.054 | 31.5 | 120.2 |
+| aarch64 | 10,000 | 0.129 | 0.400 | 0.352 | 31.6 | 158.4 |
+| aarch64 | 50,000 | 0.481 | 1.950 | 1.706 | 31.6 | 416.9 |
+
+At 50,000 rows, reopen was 43/53 ms and no-op IPC 22/26 microseconds
+(x86_64/aarch64). Batch write time was 2.95/4.45 seconds; this synthetic adapter
+path excludes Nim ingress validation. Store size was 206,204,928 bytes.
+Native scans include Conspack decoding; bridge scans add pipe/JSON/Python work;
+searches add Nim schema validation, scoring and top-k. These are separate paths,
+not additive costs. Parent RSS includes the Python driver, worker RSS includes
+SBCL heap and LMDB pages. The heap algorithm bounds retained candidates, not
+total process memory; worker RSS grew materially with scale.
+
+Full JSON results are the run's =storage-benchmark-ubuntu-24.04= and
+=storage-benchmark-ubuntu-24.04-arm= artifacts. The local Nix build was blocked
+by dependency-download errors; the successful runtime proof comes from native CI.
+Release approval and production-readiness remain outside this acceptance.
