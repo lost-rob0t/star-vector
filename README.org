@@ -176,6 +176,9 @@ one larger row is permitted to preserve the existing document contract. An
 incomplete target rejects ordinary opens. Competing migrators are fenced by the
 expected checkpoint. Publication follows full record/count readback and a second
 source fingerprint check. An existing unrelated or unmarked Tek9 store is refused.
+Existing stores are probed through read-only, non-creating LMDB calls before
+Tek9 opens or prepares any named databases. A lock on the directory inode
+coordinates first creation without adding a lock file to the destination.
 A crash before the initial header commit may leave an unmarked directory; choose
 a new destination rather than deleting or adopting unknown data automatically.
 

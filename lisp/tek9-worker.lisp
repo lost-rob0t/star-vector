@@ -28,13 +28,43 @@
   (unless (equal (getf (header db) :state) "ready")
     (error "Migration incomplete; resume the explicit migration first.")))
 
-(defun open-store (request)
-  (let* ((path (uiop:ensure-directory-pathname (field request "path")))
-         (existing (probe-file (merge-pathnames "data.mdb" path)))
+(defun existing-header (path)
+  ;; Tek9 OPEN-DATABASE and transaction preparation create DBIs independently
+  ;; of our application transaction. Establish ownership before either runs.
+  ;; Use the producer's LMDB dependency in read-only/non-creating mode, and its
+  ;; public decoder. Normal LMDB reader locking protects the probe from writers.
+  (handler-case
+      (lmdb:with-env (env path :read-only t :if-does-not-exist :error :max-dbs 64)
+        (let ((meta (lmdb:get-db +meta+ :env env :if-does-not-exist :error
+                                      :key-encoding :utf-8 :value-encoding :octets)))
+          (lmdb:get-db "std" :env env :if-does-not-exist :error)
+          (lmdb:with-txn (:env env :write nil)
+            (let ((encoded (lmdb:get meta "header")))
+              (when encoded (tek9:doc-value (tek9:$ encoded)))))))
+    (lmdb:lmdb-not-found-error () nil)))
+
+(defun validate-header (meta request)
+  (unless (equal (getf meta :format) "star-vector/tek9/1")
+    (error "Existing environment has no supported Star Vector header."))
+  (unless (= (getf meta :dimensions) (field request "dimensions"))
+    (error "vector store dimension mismatch"))
+  (let ((source (jsown:val-safe request "source")))
+    (if source
+        (unless (and (equal source (getf meta :source))
+                     (eql (field request "total") (getf meta :total)))
+          (error "Migration source fingerprint/count mismatch or destination already in use."))
+        (unless (equal (getf meta :state) "ready")
+          (error "Migration incomplete; resume the explicit migration first.")))))
+
+(defun open-store-locked (request path)
+  (let* ((existing (probe-file (merge-pathnames "data.mdb" path)))
          (source (jsown:val-safe request "source"))
+         ;; This binding must finish before NEW-DATABASE/OPEN-DATABASE below.
+         (checked (when existing (validate-header (existing-header path) request)))
          (db (tek9:open-database
               (tek9:new-database "star-vector" :path path :durability :full
                                  :index-definitions nil))))
+    (declare (ignore checked))
     (handler-case
         (progn
           (tek9:with-write-transaction (db :database-names (list +meta+))
@@ -47,17 +77,26 @@
                                  :source source :total (jsown:val-safe request "total")
                                  :next 0 :count 0))
                 (save-header db meta))
-              (unless (equal (getf meta :format) "star-vector/tek9/1")
-                (error "Unsupported Tek9 store format."))
-              (unless (= (getf meta :dimensions) (field request "dimensions"))
-                (error "vector store dimension mismatch"))
-              (if source
-                  (unless (and (equal source (getf meta :source))
-                               (eql (field request "total") (getf meta :total)))
-                    (error "Migration source fingerprint/count mismatch or destination already in use."))
-                  (assert-ready db))))
+              (validate-header meta request)))
           db)
       (error (condition) (tek9:close-database db) (error condition)))))
+
+(defun open-store (request)
+  ;; Lock the directory inode itself: no lock/ownership file is created in an
+  ;; existing environment. Competing first opens wait until the header commits.
+  ;; The OS releases this advisory lock even if the worker is killed.
+  (let ((path (uiop:ensure-directory-pathname (field request "path"))))
+    (uiop:ensure-all-directories-exist (list path))
+    (let ((fd (sb-posix:open (namestring path)
+                            (logior sb-posix:o-rdonly sb-posix:o-directory))))
+      (unwind-protect
+           (progn
+             (sb-posix:fcntl fd sb-posix:f-setfd 1) ; Linux FD_CLOEXEC
+             ;; Linux LOCK_EX; both supported flake targets are Linux.
+             (unless (zerop (cffi:foreign-funcall "flock" :int fd :int 2 :int))
+               (error "Cannot lock store directory for ownership validation."))
+             (open-store-locked request path))
+        (sb-posix:close fd)))))
 
 (defun dispatch (db request)
   (let ((op (field request "op")))

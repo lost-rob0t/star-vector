@@ -65,6 +65,7 @@ if any required build/test cannot be executed.
 |------+--------+-----------------+----------|
 | 2026-10-11 | Record scoped integration design and gate | Codex | Issue 5; inspected producer and consumer source |
 | 2026-10-11 | Record native acceptance and synthetic scale measurements | Codex | Run 38114387574 at 0c244fedba0030af851bbba27a66885cf31389db |
+| 2026-10-11 | Correct unrelated-store rejection before producer DBI preparation | Codex | Independent review of 5388c51; read-only ownership probe and preservation regression |
 
 * IMPLEMENTED RAGE Execution Record
 :PROPERTIES:
@@ -110,6 +111,22 @@ Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed
   across eight caller threads in addition to the persistent concurrency tests.
 
 * Native acceptance evidence
+
+Independent review of =5388c51= identified that Tek9's =open-database= and
+transaction preparation can create named databases before an application
+transaction starts. Rejecting an unrelated environment inside that transaction
+therefore did not preserve it. The corrected adapter first reads the ownership
+header using the producer's public LMDB dependency with =:read-only t= and
+=:if-does-not-exist :error=, then applies format/dimension/migration checks before
+calling the producer's writable open. The producer remains responsible for all
+record writes, transactions, and encoding. Normal LMDB reader coordination is
+retained; the probe does not start a write transaction or create named databases.
+A Linux advisory lock on the directory inode coordinates simultaneous first
+creators without adding files to an existing store. A synthetic foreign Tek9
+fixture now verifies that both rejected open and rejected migration preserve
+the named-database inventory, all encoded records, exact =data.mdb= bytes, and
+directory file names. A separate 16-opener test exercises first-creation races.
+Corrected-head runtime evidence will be recorded in draft PR 6 before re-review.
 
 [[https://github.com/lost-rob0t/star-vector/actions/runs/38114387574][Run 38114387574]] passed at
 =0c244fedba0030af851bbba27a66885cf31389db= on x86_64-linux and aarch64-linux.

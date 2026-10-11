@@ -105,6 +105,13 @@ def main(cli, library):
 
     with tempfile.TemporaryDirectory(prefix="sv-integration-") as root:
         root = Path(root)
+        # Coordinate simultaneous first creators before any header exists.
+        first_create = root / "first-create"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(lambda _: command("init", first_create, 3), range(16)))
+        first_handle = client.open(first_create)
+        assert client.lib.sv_len(first_handle) == 0
+        client.check(client.lib.sv_close(first_handle))
         path = root / "live"
         a = client.open(path)
         b = client.open(path)
@@ -182,6 +189,28 @@ def main(cli, library):
             dict(document=document(f"old:{i:03}"), vector=[1.0, float(i % 3), 0.0]) for i in range(270)])
         original = json.dumps(snapshot).encode()
         source.write_bytes(original)
+        # Reject a genuinely unrelated producer environment without creating DBIs,
+        # modifying records, or committing ANY change to its data.mdb bytes.
+        unrelated = root / "unrelated-tek9"
+        def foreign_inventory(action):
+            output = subprocess.check_output([
+                "sbcl", "--noinform", "--non-interactive", "--no-userinit", "--no-sysinit",
+                "--load", str(Path(__file__).with_name("tek9_unrelated.lisp"))],
+                env=os.environ | {"SV_TEST_STORE": str(unrelated), "SV_TEST_ACTION": action},
+                text=True, timeout=60)
+            return json.loads(output.strip().splitlines()[-1])
+        inventory = foreign_inventory("create")
+        assert {db["name"] for db in inventory["databases"]} == {"std", "foreign/custom"}
+        assert sum(len(db["records"]) for db in inventory["databases"]) == 2
+        database_bytes = (unrelated / "data.mdb").read_bytes()
+        database_files = sorted(p.name for p in unrelated.iterdir())
+        for args in (("init", unrelated, 3), ("migrate", source, unrelated, 3)):
+            rejected = command(*args, success=False)
+            assert "header" in rejected.stderr.lower()
+            assert foreign_inventory("inspect") == inventory
+            assert (unrelated / "data.mdb").read_bytes() == database_bytes
+            assert sorted(p.name for p in unrelated.iterdir()) == database_files
+            assert source.read_bytes() == original
         destination = root / "migrated"
         assert command("get", source, 3, "old:000") == document("old:000")
         command("delete", source, 3, "old:000", success=False)
