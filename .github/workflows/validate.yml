@@ -39,6 +39,14 @@ jobs:
           path: memory-profile.json
       - name: Build and run app outside the checkout
         run: bash tests/flake-app.sh
+      - name: Export real-model client proof
+        run: |
+          out=$(nix build .#text-check --no-update-lock-file --no-link --print-out-paths)
+          cp "$out/evidence.json" text-client-proof.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: text-client-proof-${{ matrix.runner }}
+          path: text-client-proof.json
   rage:
     runs-on: ubuntu-latest
     steps:

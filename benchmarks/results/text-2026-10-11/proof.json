@@ -1,0 +1,204 @@
+{
+  "clients": {
+    "common_lisp": {
+      "status": "passed",
+      "stdout": "Common Lisp text client passed"
+    },
+    "javascript": {
+      "status": "passed",
+      "stdout": "JavaScript text client passed"
+    },
+    "nim": {
+      "status": "passed",
+      "stdout": "Nim text client passed"
+    },
+    "python": {
+      "final_revision": "lisp",
+      "status": "passed"
+    }
+  },
+  "dependencies": {
+    "Jinja2": "3.1.6",
+    "MarkupSafe": "3.0.4",
+    "Pygments": "2.21.0",
+    "annotated-doc": "0.0.5",
+    "annotated-types": "0.8.0",
+    "anyio": "4.15.1",
+    "blis": "1.3.3",
+    "catalogue": "2.0.10",
+    "certifi": "2026.7.22",
+    "charset-normalizer": "3.5.2",
+    "click": "8.5.0",
+    "cloudpathlib": "0.26.0",
+    "confection": "1.3.3",
+    "cymem": "2.0.13",
+    "en_core_web_md": "3.8.0",
+    "h11": "0.16.0",
+    "httpcore": "1.0.9",
+    "httpx": "0.28.1",
+    "idna": "3.20",
+    "markdown-it-py": "4.2.0",
+    "mdurl": "0.1.2",
+    "murmurhash": "1.0.15",
+    "numpy": "2.5.4",
+    "packaging": "26.3",
+    "pip": "25.0.1",
+    "preshed": "3.0.13",
+    "pydantic": "2.14.0",
+    "pydantic_core": "2.50.0",
+    "requests": "2.34.2",
+    "rich": "15.0.0",
+    "setuptools": "84.0.0",
+    "shellingham": "1.5.4",
+    "smart_open": "8.0.2",
+    "spacy": "3.8.16",
+    "spacy-legacy": "3.0.12",
+    "spacy-loggers": "1.0.5",
+    "srsly": "2.5.4",
+    "thinc": "8.3.13",
+    "tqdm": "4.70.1",
+    "typer": "0.27.3",
+    "typing-inspection": "0.4.4",
+    "typing_extensions": "4.16.0",
+    "urllib3": "2.8.0",
+    "wasabi": "1.1.3",
+    "weasel": "1.0.0",
+    "wrapt": "2.5.0"
+  },
+  "ingest_four_seconds": 1.1921970140001577,
+  "input_rejections": "passed",
+  "kind": "real-pinned-model-synthetic-prose-proof",
+  "limits": [
+    "English static word vectors; no contextual encoder or retrieval benchmark claim",
+    "Convenience clients start a Python encoder per call; Python library reuses it",
+    "No remote service or billion-scale text execution"
+  ],
+  "metrics": {
+    "cosine": {
+      "ranking": [
+        {
+          "id": "synthetic-0",
+          "value": 0.8947931981035855
+        },
+        {
+          "id": "synthetic-2",
+          "value": 0.7294975021120745
+        },
+        {
+          "id": "synthetic-1",
+          "value": 0.618408630885409
+        },
+        {
+          "id": "synthetic-3",
+          "value": 0.5013803356808773
+        }
+      ],
+      "seconds": 0.0013986470003146678
+    },
+    "dot": {
+      "ranking": [
+        {
+          "id": "synthetic-0",
+          "value": 0.8947932030072236
+        },
+        {
+          "id": "synthetic-2",
+          "value": 0.7294975095050804
+        },
+        {
+          "id": "synthetic-1",
+          "value": 0.6184086281761525
+        },
+        {
+          "id": "synthetic-3",
+          "value": 0.5013803399954424
+        }
+      ],
+      "seconds": 0.0011861599996336736
+    },
+    "euclidean": {
+      "ranking": [
+        {
+          "id": "synthetic-0",
+          "value": 0.4587086275032744
+        },
+        {
+          "id": "synthetic-2",
+          "value": 0.7355304217084441
+        },
+        {
+          "id": "synthetic-1",
+          "value": 0.8736033052167735
+        },
+        {
+          "id": "synthetic-3",
+          "value": 0.9986187146353032
+        }
+      ],
+      "seconds": 0.0010892120003518357
+    },
+    "manhattan": {
+      "ranking": [
+        {
+          "id": "synthetic-0",
+          "value": 6.500093514187029
+        },
+        {
+          "id": "synthetic-2",
+          "value": 9.901506538430112
+        },
+        {
+          "id": "synthetic-1",
+          "value": 11.665619159779453
+        },
+        {
+          "id": "synthetic-3",
+          "value": 13.455166940744675
+        }
+      ],
+      "seconds": 0.0011844160003420257
+    }
+  },
+  "model_load_seconds": 2.377819974999966,
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "profile": {
+    "artifactSha256": {
+      "config.cfg": "24b1b17065a74a6a3f999dd9c722f5532dc6bb5994b6a7ba5aa4f2ce09d434cc",
+      "meta.json": "5bcf739c5ac3b0038fc218d3227f8600e35a420e29fbe4c6bcc643688ab63b1b",
+      "tokenizer": "b014e8bba4958b120af2d0c1c63eabb7c00379f2bacaf10df7c5325efd2ea467",
+      "vocab/key2row": "1a1825f75ae9d691024317632021a49970ce61bcc007bc176f77ca429c3bcf5c",
+      "vocab/lookups.bin": "fce9c883c56165f29573cc938c2a1c9d417ac61bd8f56b671dd5f7996de70682",
+      "vocab/strings.json": "efd814b36290d2513b683c924571d9e3b25bf6c60bb89c13cb8c3436d2cb6cfa",
+      "vocab/vectors": "22d102290ba09bb681c5a2e6063e9b4cea4c41dec9517565181a907b6ba6a830",
+      "vocab/vectors.cfg": "ff4359091952c8cd16f1f0482f5770fb82d1707368d5cca3c46aa501f552e3c5"
+    },
+    "dimensions": 300,
+    "extraction": "rawContent-verbatim-v1",
+    "format": "star-vector/embedding/1",
+    "language": "en",
+    "maxCharacters": 1000000,
+    "model": "en_core_web_md",
+    "modelSha256": "5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310",
+    "modelVersion": "3.8.0",
+    "normalization": "l2-float64-fsum-then-float32-v1",
+    "numpyVersion": "2.5.4",
+    "overflow": "reject",
+    "pooling": "spacy.Doc.vector-mean-v1",
+    "preprocessing": "spacy-tokenizer-all-tokens-v1",
+    "provider": "spacy.Doc.vector",
+    "providerVersion": "3.8.16",
+    "zeroVector": "reject"
+  },
+  "python": "3.12.14",
+  "query": "A kitten rests on a couch.",
+  "real_model_acknowledged_write_sigkill_reopen": "passed",
+  "reopen_new_encoder": "passed",
+  "texts": [
+    "A cat sleeps on the sofa.",
+    "The database commits durable transactions.",
+    "A rocket travels through outer space.",
+    "The chef cooks pasta in the kitchen."
+  ],
+  "total_seconds": 81.75944699399997,
+  "vector_sha256": "4be6ab7915310e9ecf9b0bc0f1bfba4e90e7d359237e3e079d8f23c6d7131b31"
+}

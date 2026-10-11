@@ -55,6 +55,13 @@
   (store :pointer))
 (cffi:defcfun ("sv_string_free" %sv-string-free) :void
   (value :pointer))
+(cffi:defcfun ("sv_bind_embedding_profile" %sv-bind-embedding-profile) :int32
+  (store :pointer) (profile-json :string))
+(cffi:defcfun ("sv_get_embedding_profile" %sv-get-embedding-profile) :int32
+  (store :pointer) (out-json :pointer))
+(cffi:defcfun ("sv_upsert_document_with_profile" %sv-upsert-document-with-profile) :int32
+  (store :pointer) (document-json :string) (vector :pointer)
+  (vector-length size-t) (profile-json :string))
 
 (defun ensure-library-loaded ()
   (unless *star-vector-library*
@@ -174,3 +181,38 @@
                          (metric-value metric)
                          limit
                          out-string))))))
+
+(defun bind-embedding-profile (store profile-json)
+  (check-status (with-star-vector-call
+                  (%sv-bind-embedding-profile (store-pointer store) profile-json)) store)
+  t)
+
+(defun embedding-profile (store)
+  (call-for-owned-string store
+    (lambda (out) (%sv-get-embedding-profile (store-pointer store) out))))
+
+(defun upsert-embedded-document (store document-json vector profile-json)
+  (call-with-vector vector
+    (lambda (values count)
+      (check-status (with-star-vector-call
+                      (%sv-upsert-document-with-profile
+                       (store-pointer store) document-json values count profile-json)) store)))
+  t)
+
+(defun text-command (arguments input)
+  "Local CLI convenience path, returning the same JSON strings as CFFI calls."
+  (uiop:run-program (cons (or (uiop:getenv "STAR_VECTOR_CLI") "star-vector") arguments)
+                    :input (make-string-input-stream input)
+                    :output :string :error-output :string))
+
+(defun text-embedding-profile ()
+  (text-command (list "embedding-profile") ""))
+
+(defun upsert-text-document (path document-json)
+  (text-command (list "embed-upsert" path "-") document-json))
+
+(defun search-text (path query &key (metric :cosine) (limit 10))
+  (unless (and (integerp limit) (>= limit 0)) (error "Limit must be non-negative."))
+  (metric-value metric)
+  (text-command (list "embed-search" path (string-downcase (symbol-name metric))
+                      (write-to-string limit) "-") query))

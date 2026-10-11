@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "star-vector-client"
+version = "0.1.0"
+description = "Local Star Vector C ABI and document embedding clients"
+requires-python = ">=3.11"
+license = "AGPL-3.0-only"
+
+[project.optional-dependencies]
+text = ["spacy==3.8.16"]
+
+[project.scripts]
+star-vector-text = "star_vector_client.__main__:cli"
+
+[tool.setuptools.package-data]
+star_vector_client = ["model.json"]

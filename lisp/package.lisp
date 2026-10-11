@@ -13,7 +13,13 @@
    #:upsert-document
    #:get-document
    #:delete-document
-   #:search))
+   #:search
+   #:bind-embedding-profile
+   #:embedding-profile
+   #:upsert-embedded-document
+   #:text-embedding-profile
+   #:upsert-text-document
+   #:search-text))
 
 (defpackage #:star-vector/tests
   (:use #:cl)

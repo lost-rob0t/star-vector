@@ -41,6 +41,16 @@ SV_API size_t sv_dimensions(sv_store_t store);
 SV_API size_t sv_len(sv_store_t store);
 SV_API int32_t sv_upsert_document(sv_store_t store, const char *document_json,
                                   const float *vector, size_t vector_len);
+/* Binding is immutable and allowed only on empty, non-legacy stores. Matching
+ * repeated binds are idempotent. Profile-aware writes are checked atomically;
+ * ordinary raw upserts are rejected on profile-bound stores. JSON object keys
+ * are canonicalized before equality checks. get returns JSON null if unbound.
+ * Returned strings use sv_string_free, as with document/search results. */
+SV_API int32_t sv_bind_embedding_profile(sv_store_t store, const char *profile_json);
+SV_API int32_t sv_get_embedding_profile(sv_store_t store, char **out_profile_json);
+SV_API int32_t sv_upsert_document_with_profile(sv_store_t store,
+  const char *document_json, const float *vector, size_t vector_len,
+  const char *profile_json);
 SV_API int32_t sv_get_document(sv_store_t store, const char *id,
                                char **out_document_json);
 SV_API int32_t sv_delete_document(sv_store_t store, const char *id,

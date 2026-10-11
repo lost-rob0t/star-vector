@@ -9,13 +9,22 @@ StarIntel 0.10.1 schema. The same implementation is available through:
 
 - the =star_vector= Nim module;
 - the =star-vector= command-line client;
-- a stable C ABI in =include/star_vector.h=; and
-- a Common Lisp client built with CFFI and CFFI-Grovel.
+- a stable C ABI in =include/star_vector.h=;
+- a Common Lisp client built with CFFI and CFFI-Grovel;
+- a Python library over the same C ABI; and
+- a local JavaScript/TypeScript client over the same CLI.
 
 The initial backend performs exact exhaustive search. It supports cosine
 similarity, dot product, Euclidean distance, and Manhattan distance. Similarity
 scores sort high-to-low; distances sort low-to-high; equal scores are ordered by
 document ID.
+
+Canonical document text can now be embedded locally and persisted in Tek9.
+The optional =nix run .#text= package imports pinned spaCy and verified English
+model assets. It adds =embed-upsert=, =embed-search= and =embedding-profile=
+commands, with shared helpers for all four languages. The store checks an
+immutable model/preprocessing profile inside each write transaction.
+See [[file:clients/README.md][client setup, examples, compatibility and limits]]. No daemon is introduced.
 
 * Build and test
 

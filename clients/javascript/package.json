@@ -1,0 +1,10 @@
+{
+  "name": "@starintel/star-vector",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local Star Vector CLI clients for Node.js and TypeScript",
+  "license": "AGPL-3.0-only",
+  "engines": {"node": ">=18"},
+  "exports": {".": {"types": "./index.d.mts", "import": "./index.mjs"}},
+  "files": ["index.mjs", "index.d.mts"]
+}

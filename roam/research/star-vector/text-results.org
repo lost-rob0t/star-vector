@@ -1,0 +1,116 @@
+:PROPERTIES:
+:ID: 6bfa1a2b-d7d9-40d7-a066-dd153460ab0f
+:END:
+#+title: Document embedding and language client evidence
+#+description: Pinned local English model proof, profile compatibility, cross-language persistence and actual limitations.
+#+status: RESEARCH
+#+filetags: :star-vector:embedding:validation:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Synthetic document and client execution | User | APPROVED | Finish embedding workflow and common clients | Issue 11, delegated continuation |
+| Local evidence recording | Implementing agent | APPROVED | Observed test results and retained output | Tests and artifact below |
+| Final-head native validation | CI | PENDING | x86_64/aarch64 full package and text checks | Draft PR 10 |
+| Merge | Independent reviewer | PENDING | Final diff and reproducible proof | Draft PR 10 |
+
+* Verified Facts
+
+The imported Tek9 revision remains e6d1cb86a2e268a894eae3acae9617238b2adcff.
+The new text library uses the existing Nim C ABI for storage/search. Python
+reuses the encoder and store in process. Nim, Common Lisp and Node.js helpers
+use the same local CLI commands; TypeScript declarations are checked. No
+daemon or remote protocol was added.
+
+The real provider is spaCy 3.8.16 with the official en_core_web_md 3.8.0 model,
+300 dimensions. The downloaded 33,480,380-byte wheel has SHA256
+5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310.
+The model tokenizer, config and vocabulary files have individual checked
+SHA256 pins in =clients/python/star_vector_client/model.json=. The optional
+Nix output fetches the fixed wheel; runtime performs no downloads. The local
+proof used Python 3.12.14 and NumPy 2.5.4; complete dependency versions and
+actual timings are in =benchmarks/results/text-2026-10-11/proof.json=.
+
+The real-model test uses four synthetic prose documents and a separate
+related query. It checks all four metric scores against independent scalar
+calculations over the exact emitted float32 vectors. The related cat document
+ranks first for the kitten query. This is an end-to-end semantic demonstration,
+not a retrieval quality benchmark. A fresh encoder/store reopens the data.
+Python creates a shared canonical document, Nim updates it, JavaScript updates
+it again, Common Lisp updates it, and Python verifies final revision,
+provenance and unrelated extensions. A real-model writer is killed with
+SIGKILL after acknowledgement; a fresh handle verifies text/profile/vector
+readback. Empty, oversized and all-unknown text are rejected without truncation.
+
+Five separate deterministic fixture tests passed for all metrics, exact ties,
+metadata preservation, updates/reopen, incompatible profiles, populated raw
+store refusal, stale raw handles, concurrent competing profile binds, invalid
+documents, transient profile behavior and acknowledged-write SIGKILL recovery.
+These fixture vectors are explicitly not a semantic model.
+The actual pinned v1 worker was also executed: an existing handle rejected a
+write after profile binding, and a fresh v1 open rejected the v2 header, with
+no inserted record. The test uses the existing pinned memory-baseline source.
+
+Current native Nim tests, exhaustive search reference, C ABI, Common Lisp CFFI, CLI and the
+400-check persisted metric contract passed locally. Streaming JSON edge cases,
+schema artifact verification and all 14 Python repository tests passed.
+
+The optional Nix outputs evaluated locally after correcting the removed
+nodePackages alias to the pinned nixpkgs top-level typescript package. Full
+local Nix builds remain blocked by cache/download access. Native CI checks
+are required for the final head. The prior scale head 1cf7e791 passed both
+architectures in runs 38152715341 and 38152712553; those runs do not validate
+the subsequent document/client change.
+
+Primary sources retrieved 2026-10-11:
+- https://github.com/explosion/spacy-models/releases/tag/en_core_web_md-3.8.0
+- https://spacy.io/usage/linguistic-features#vectors-similarity
+- https://raw.githubusercontent.com/NixOS/nixpkgs/c59305bab2065cfecc4944690d9eedbb56f3a9fa/pkgs/development/python-modules/spacy/default.nix
+
+* Inference
+
+The immutable profile prevents accidental mixing of incompatible model,
+dimension, extraction, pooling and normalization versions through these APIs.
+Profile-aware writes and binding share the producer write transaction. A
+distinct v2 application header and ready state also fence old v1 workers.
+This is compatibility enforcement, not authentication of arbitrary custom
+encoders. Callers supplying their own profile must describe their encoder
+accurately.
+
+For repeated ingestion, the reusable Python library avoids per-call model
+startup. The convenience clients favor a small shared interface and explicit
+local boundary; they are not evidence of high-throughput remote serving.
+The existing scale report and Tek9-authoritative tiered/history design remain
+applicable; no ANN implementation or history API is introduced here.
+
+* Contradictions
+
+The restored shell was working at 15:56:28 UTC despite an external environment
+disconnect report. Git push lacked authentication, while the authenticated
+GitHub connector successfully published the scale checkpoint. Hugging Face
+and Google Storage returned proxy HTTP 403; the official spaCy GitHub release
+download succeeded. No blocked model was represented as tested.
+
+The existing =tests/storage_integration.py= could not start locally after
+restore because =/proc/<pid>/task/<pid>/children= was absent, including an
+escalated retry. This is a setup failure, not a passing crash/migration result.
+The unchanged suite remains mandatory in native CI. The new crash tests do
+not use that unavailable proc path and did execute successfully.
+
+* Unresolved Questions
+
+Final-head native package behavior and independent review remain pending.
+The static English encoder does not establish contextual, multilingual or
+domain-specific retrieval quality. Large text chunking is explicit caller work;
+the encoder rejects over 1,000,000 characters. Different recorded NumPy
+versions yield different profiles. Convenience calls incur process/model
+startup. Acknowledged-write process-kill tests are not device power-loss proof.
+No billion-row text run, remote daemon, automatic revision history or
+production-readiness claim is made.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Record real pinned model and shared language-client proof separately from deterministic fixtures | Codex | tests/text_clients.py, tests/embedding_integration.py and retained proof JSON |

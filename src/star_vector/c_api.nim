@@ -162,12 +162,13 @@ proc sv_len(storePointer: pointer): csize_t {.exportc, cdecl, dynlib.} =
   except CatchableError as error:
     discard setError(handle, SvErrorInternal, error.msg)
 
-proc sv_upsert_document(
+proc upsertFromC(
   storePointer: pointer,
   documentJson: cstring,
   vector: ptr cfloat,
-  vectorLength: csize_t
-): int32 {.exportc, cdecl, dynlib.} =
+  vectorLength: csize_t,
+  profile = ""
+): int32 =
   if storePointer.isNil or documentJson.isNil:
     return setError(nil, SvErrorInvalidArgument, "store and document pointers are required")
   let handle = cast[ptr StoreHandle](storePointer)
@@ -180,7 +181,7 @@ proc sv_upsert_document(
         parsed.validation.category & ": " & parsed.validation.message
       )
     let copied = copyVector(vector, vectorLength)
-    handle.store.upsertDocument(parsed.document, copied)
+    handle.store.upsertDocument(parsed.document, copied, profile)
     clearError(handle)
     SvOk
   except ValueError as error:
@@ -191,6 +192,41 @@ proc sv_upsert_document(
     setError(handle, SvErrorIo, error.msg)
   except OSError as error:
     setError(handle, SvErrorIo, error.msg)
+  except CatchableError as error:
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
+
+proc sv_upsert_document(storePointer: pointer, documentJson: cstring,
+    vector: ptr cfloat, vectorLength: csize_t): int32 {.exportc, cdecl, dynlib.} =
+  upsertFromC(storePointer, documentJson, vector, vectorLength)
+
+proc sv_upsert_document_with_profile(storePointer: pointer, documentJson: cstring,
+    vector: ptr cfloat, vectorLength: csize_t, profile: cstring): int32 {.exportc, cdecl, dynlib.} =
+  if profile.isNil:
+    return setError(nil, SvErrorInvalidArgument, "embedding profile pointer is required")
+  upsertFromC(storePointer, documentJson, vector, vectorLength, $profile)
+
+proc sv_bind_embedding_profile(storePointer: pointer, profile: cstring): int32 {.exportc, cdecl, dynlib.} =
+  if storePointer.isNil or profile.isNil:
+    return setError(nil, SvErrorInvalidArgument, "store and embedding profile pointers are required")
+  let handle = cast[ptr StoreHandle](storePointer)
+  try:
+    handle.store.bindEmbeddingProfile($profile)
+    clearError(handle)
+    SvOk
+  except CatchableError as error:
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInvalidArgument), error.msg)
+
+proc sv_get_embedding_profile(storePointer: pointer, outJson: ptr cstring): int32 {.exportc, cdecl, dynlib.} =
+  if outJson.isNil:
+    return setError(nil, SvErrorInvalidArgument, "out profile pointer is required")
+  outJson[] = nil
+  if storePointer.isNil:
+    return setError(nil, SvErrorInvalidArgument, "store pointer is required")
+  let handle = cast[ptr StoreHandle](storePointer)
+  try:
+    outJson[] = copyCString($handle.store.embeddingProfile())
+    clearError(handle)
+    SvOk
   except CatchableError as error:
     setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
