@@ -25,6 +25,7 @@ def rss(pid):
 def run(library, counts):
     client = Client(library)
     rows = []
+    dimensions = 128
     for count in counts:
         with tempfile.TemporaryDirectory(prefix="sv-benchmark-") as root:
             path = str(Path(root) / "store")
@@ -36,7 +37,7 @@ def run(library, counts):
                 assert result["ok"], result
                 return result
             started = time.perf_counter()
-            request(dict(op="open", path=path, dimensions=3, source="synthetic-benchmark", total=count))
+            request(dict(op="open", path=path, dimensions=dimensions, source="synthetic-benchmark", total=count))
             startup = time.perf_counter() - started
             start = time.perf_counter()
             for _ in range(1000): request(dict(op="flush"))
@@ -47,14 +48,14 @@ def run(library, counts):
                 for i in range(offset, min(offset + 128, count)):
                     doc = document(f"bench:{i:08}")
                     doc["rawContent"] = "x" * 1024
-                    batch.append(dict(id=doc["id"], record=json.dumps(dict(document=doc, vector=[1, i % 7, 0]))))
+                    batch.append(dict(id=doc["id"], record=json.dumps(dict(document=doc, vector=[1.0, float(i % 7)] + [0.0] * (dimensions - 2)))))
                 request(dict(op="migrate-batch", expected=offset, records=batch))
             write_seconds = time.perf_counter() - start
             request(dict(op="publish"))
             request(dict(op="close")); worker.wait(timeout=10)
 
             before = children()
-            start = time.perf_counter(); handle = client.open(path)
+            start = time.perf_counter(); handle = client.open(path, dimensions)
             reopen = time.perf_counter() - start
             worker_pid, = children() - before
             peaks = [rss(os.getpid()), rss(worker_pid)]
@@ -65,7 +66,7 @@ def run(library, counts):
                     peaks[1] = max(peaks[1], rss(worker_pid))
             sampler = threading.Thread(target=sample); sampler.start()
             start = time.perf_counter()
-            results = client.search(handle, 1, 10)
+            results = client.search(handle, 1, 10, [1.0] + [0.0] * (dimensions - 1))
             search_seconds = time.perf_counter() - start
             stop.set(); sampler.join()
             assert len(results) == min(10, count)
@@ -85,7 +86,7 @@ def run(library, counts):
             # Stream the same rows through the worker, omitting Nim scoring/validation.
             worker = subprocess.Popen([os.environ["STAR_VECTOR_TEK9_WORKER"]],
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-            request(dict(op="open", path=path, dimensions=3))
+            request(dict(op="open", path=path, dimensions=dimensions))
             start = time.perf_counter()
             worker.stdin.write('{"op":"scan"}\n'); worker.stdin.flush()
             scanned = 0
@@ -97,7 +98,7 @@ def run(library, counts):
             bridge_scan = time.perf_counter() - start
             assert scanned == count
             request(dict(op="close")); worker.wait(timeout=10)
-            rows.append(dict(records=count, dimensions=3, payload_bytes=1024, k=10,
+            rows.append(dict(records=count, dimensions=dimensions, payload_bytes=1024, k=10,
                              startup_seconds=startup, reopen_seconds=reopen,
                              ipc_noop_seconds=ipc, batch_write_seconds=write_seconds,
                              native_scan_seconds=native["native_scan_seconds"],

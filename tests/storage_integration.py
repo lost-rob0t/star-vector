@@ -55,9 +55,9 @@ class Client:
         finally:
             self.lib.sv_string_free(result)
 
-    def search(self, handle, metric, limit=10):
+    def search(self, handle, metric, limit=10, query=(1, 0, 0)):
         result = C.c_void_p()
-        self.check(self.lib.sv_search_json(handle, (C.c_float * 3)(1, 0, 0), 3, metric, limit, C.byref(result)), handle)
+        self.check(self.lib.sv_search_json(handle, (C.c_float * len(query))(*query), len(query), metric, limit, C.byref(result)), handle)
         try:
             return json.loads(C.string_at(result))
         finally:
@@ -212,7 +212,12 @@ def main(cli, library):
             "--load", str(Path(__file__).with_name("tek9_crash_transaction.lisp"))],
             env=os.environ | {"SV_TEST_STORE": str(from_worker)}, stdout=subprocess.PIPE, text=True)
         try:
-            assert transaction.stdout.readline().strip() == "transaction-open"
+            # CFFI's external compiler can write to the inherited OS stdout even
+            # while Lisp *standard-output* is bound to *error-output*.
+            for line in transaction.stdout:
+                if line.strip() == "transaction-open": break
+            else:
+                raise AssertionError("producer exited before opening the crash-test transaction")
             transaction.kill(); transaction.wait(timeout=10)
         finally:
             if transaction.poll() is None: transaction.kill(); transaction.wait()
