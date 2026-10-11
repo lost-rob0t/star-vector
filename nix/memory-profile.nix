@@ -6,6 +6,8 @@ let
     src = source;
     nativeBuildInputs = [ pkgs.nim pkgs.sbcl ] ++ lispPackages;
     dontConfigure = true;
+    # ELF stripping removes the appended SBCL core from saved executables.
+    dontStrip = true;
     buildPhase = ''
       export HOME="$TMPDIR/home"
       export XDG_CACHE_HOME="$out/lib/cache"

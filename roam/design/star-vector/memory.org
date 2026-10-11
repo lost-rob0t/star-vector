@@ -51,6 +51,7 @@ Rerun native x86_64/aarch64 checks and request independent review before merge.
 | Date | Change | Author or actor | Evidence |
 |------+--------+-----------------+----------|
 | 2026-10-11 | Record profiling-first scope and acceptance gates | Codex | Issue 7; merged source inspection |
+| 2026-10-11 | Fix benchmark-image packaging after native CI exposed stripped appended SBCL cores; production tests passed before this benchmark startup failure | Codex | Job 114404141635; dontStrip in profiling variants |
 
 * IMPLEMENTED RAGE Execution Record
 :PROPERTIES:
