@@ -85,6 +85,19 @@ def wait_exited(pid):
 def main(cli, library):
     client = Client(library)
     baseline_children = children()
+    # Exercise the shared schema graph repeatedly across foreign caller threads.
+    # Separate handles alone are insufficient if validator reference counts race.
+    def transient_writer(i):
+        handle = client.open("")
+        try:
+            for n in range(100):
+                client.check(client.put(handle, f"thread:{i}:{n}"), handle)
+            assert client.lib.sv_len(handle) == 100
+            assert len(client.search(handle, 1, 10)) == 10
+        finally:
+            client.check(client.lib.sv_close(handle))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(transient_writer, range(16)))
     def command(*args, success=True):
         p = subprocess.run([cli, *map(str, args)], capture_output=True, text=True, timeout=30)
         assert (p.returncode == 0) == success, (args, p.returncode, p.stdout, p.stderr)

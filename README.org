@@ -75,6 +75,7 @@ this). It preserves the host runtime's signal handlers and uses the process
 allocator so foreign threads need no Nim allocator registration. Pipe writes
 mask SIGPIPE only on the calling thread. Independent handles may be used
 concurrently. Serialize calls on each individual handle, including close.
+Schema validation is serialized internally to protect shared schema references.
 Strings returned through =sv_get_document= and =sv_search_json= belong to the
 caller and must be released with =sv_string_free=. The pointer returned by
 =sv_last_error= remains owned by the library and is valid until the next call on

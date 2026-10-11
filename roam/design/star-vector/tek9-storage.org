@@ -103,6 +103,11 @@ Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed
   independent handles have a concurrent integration test.
 - Initial native CI caught missing worker compiler and a non-EQL string
   =defconstant=; both were repaired. Native acceptance is recorded below.
+- A longer local Nim 2.2.12 foreign-thread test then exposed shared schema JSON
+  reference-count races. Schema validation now holds a dedicated lock across
+  each complete validation, including temporary reference destruction. The
+  integration suite repeats 1,600 transient upserts and searches on 16 handles
+  across eight caller threads in addition to the persistent concurrency tests.
 
 * Native acceptance evidence
 
