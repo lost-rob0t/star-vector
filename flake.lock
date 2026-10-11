@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "memory-baseline": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791697762,
+        "narHash": "sha256-uK+Tl+b3JNQsbcbmJDcI6JzQl8ZyDvX07IGgXZA9oY4=",
+        "ref": "refs/heads/main",
+        "rev": "0247e40644d3277cf1c4f61337e449f278693688",
+        "revCount": 22,
+        "type": "git",
+        "url": "https://github.com/lost-rob0t/star-vector"
+      },
+      "original": {
+        "rev": "0247e40644d3277cf1c4f61337e449f278693688",
+        "type": "git",
+        "url": "https://github.com/lost-rob0t/star-vector"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1790822859,
@@ -18,6 +35,7 @@
     },
     "root": {
       "inputs": {
+        "memory-baseline": "memory-baseline",
         "nixpkgs": "nixpkgs",
         "tek9": "tek9"
       }

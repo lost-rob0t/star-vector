@@ -211,6 +211,47 @@ writes and parent/worker RSS at 1k/10k/50k synthetic rows. RSS includes mapped
 pages and runtime heaps. Native CI exports JSON artifacts; no benchmark threshold
 or production-readiness claim is implied by these sample sizes.
 
+** Matched memory profiling
+
+Build the synthetic baseline/candidate comparison with:
+
+#+begin_src sh
+nix build .#memory-profile --no-update-lock-file
+cat result/memory-profile.json
+#+end_src
+
+The validation-only =memory-baseline= input pins merged revision =0247e406=.
+Both variants import the same Tek9 library and use the same Nim/SBCL toolchain.
+The benchmark records separate parent/worker RSS, PSS, anonymous memory,
+LMDB/core mappings, cumulative Lisp allocations, sampled dynamic-space peaks,
+ten consecutive searches, reopen and three simultaneous handles. Explicit full-GC
+checkpoints estimate live dynamic space; they do not represent all runtime/code
+memory or imply the OS returned freed pages. Only benchmark images load these
+hooks. Six separate uninstrumented timing samples per variant use ABBA order.
+The normal worker has no profiling hooks or forced-GC policy.
+
+Scan responses stream JSON escaping directly to the pipe. They retain the same
+wire fields and stored record strings, including pretty JSON and Unicode, while
+avoiding full-size escaped-string and response-string copies. The producer still
+decodes each record and Nim still parses and validates it. No store rewrite,
+new storage format, or heap-limit reduction is involved. Small =k= bounds retained
+results; large individual records, SBCL startup/core memory, mapped LMDB pages
+and one worker per handle remain real costs.
+
+The package compiles dependency FASLs once and launches the worker by loading
+those immutable files into SBCL. This avoids custom saved-image fragmentation.
+It trades additional startup work for predictable repeated-search residency;
+keep handles open across operations. Total RSS/PSS across repeated searches,
+not only live object bytes, must substantiate a memory improvement.
+
+At =2ebd35f=, native PR run =38118774269= measured 50k rows with ten searches:
+worker RSS after the tenth search fell from 579 to 339 MiB on x86 and from
+496 to 336 MiB on ARM; first-scan allocation fell 66% / 71%. Parent RSS stayed
+about 31 / 33 MiB. This is a sustained-search tradeoff: idle worker RSS rose
+from about 84 / 78 to 140 / 138 MiB, and instrumented open time rose from
+54 / 54 ms to 935 / 1098 ms. Small or short-lived workloads may cost more.
+The design notes record PSS, live heap, latency, artifacts and measurement limits.
+
 * RAGE workflow
 
 Research, approved design, and implementation evidence live under =roam/=. The

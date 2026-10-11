@@ -10,6 +10,16 @@
   (write-line (jsown:to-json (cons :obj pairs)))
   (finish-output))
 (defun ok (&rest pairs) (apply #'reply (cons "ok" t) pairs))
+(defun scan-row (id record)
+  ;; Keep the existing JSON-line protocol, but avoid both full-record temporary
+  ;; strings created by generic string escaping and object serialization.
+  (check-type record string)
+  (write-string "{\"ok\":true,\"id\":")
+  (star-vector-wire:write-json-string id *standard-output*)
+  (write-string ",\"record\":")
+  (star-vector-wire:write-json-string record *standard-output*)
+  (write-line "}")
+  (finish-output))
 (defun header (db) (tek9:fetch* db "header" :database-name +meta+))
 (defun save-header (db value)
   (tek9:put-bulk db (list (tek9:new-document :id "header" :value value))
@@ -113,7 +123,7 @@
        ;; One snapshot, one decoded record at a time, no collected result list.
        (tek9:map-database db :map-fn
          (lambda (id document)
-           (ok (cons "id" id) (cons "record" (tek9:doc-value document)))))
+           (scan-row id (tek9:doc-value document))))
        (ok (cons "end" t)))
       ((equal op "upsert")
        (tek9:with-write-transaction (db :database-names (list +meta+))

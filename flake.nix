@@ -5,9 +5,13 @@
 
   inputs.tek9.url = "git+https://github.com/lost-rob0t/tek9?rev=e6d1cb86a2e268a894eae3acae9617238b2adcff";
   inputs.tek9.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.memory-baseline = {
+    url = "git+https://github.com/lost-rob0t/star-vector?rev=0247e40644d3277cf1c4f61337e449f278693688";
+    flake = false;
+  };
 
   outputs =
-    { self, nixpkgs, tek9 }:
+    { self, nixpkgs, tek9, memory-baseline }:
     let
       systems = [
         "x86_64-linux"
@@ -27,20 +31,10 @@
             pkgs.sbcl.pkgs.cffi-grovel
           ];
           lispRegistry = pkgs.lib.concatMapStringsSep ":" (package: "${package}//") lispPackages;
-          worker = pkgs.runCommand "star-vector-tek9-worker" {
-            nativeBuildInputs = [ pkgs.sbcl pkgs.stdenv.cc ] ++ lispPackages;
-          } ''
-            export XDG_CACHE_HOME="$out/lib/cache"
-            export CL_SOURCE_REGISTRY="${lispRegistry}:"
-            mkdir -p "$out/bin"
-            sbcl --noinform --non-interactive --no-userinit --no-sysinit \
-              --eval '(require :asdf)' \
-              --eval '(asdf:load-system :cffi)' \
-              --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
-              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")'  \
-              --eval '(asdf:load-system "star-vector-tek9")' \
-              --eval "(sb-ext:save-lisp-and-die \"$out/bin/star-vector-tek9-worker\" :toplevel #'star-vector-tek9:run :executable t)"
-          '';
+          worker = import ./nix/tek9-worker.nix {
+            inherit pkgs lispPackages lispRegistry;
+            source = self;
+          };
           package = pkgs.stdenv.mkDerivation {
             pname = "star-vector";
             version = "0.1.0";
@@ -87,6 +81,7 @@
               python3 scripts/sync.py --check
               python3 scripts/validate-docs.py
               python3 scripts/sync-starintel-schema.py --check
+              python3 tests/json_stream.py
 
               nim c -r --threads:on --mm:orc --path:src \
                 --out:build/test-vector-store tests/test_vector_store.nim
@@ -165,11 +160,18 @@
           default = package;
           star-vector = package;
           tek9-worker = worker;
+          memory-profile = import ./nix/memory-profile.nix {
+            inherit pkgs lispPackages lispRegistry;
+            baseline = memory-baseline;
+            candidate = self;
+            validatedPackage = package;
+          };
         }
       );
 
       checks = forAllSystems (system: {
         default = self.packages.${system}.default;
+        memory = self.packages.${system}.memory-profile;
       });
 
       apps = forAllSystems (system: {

@@ -29,6 +29,14 @@ jobs:
         with:
           name: storage-benchmark-${{ matrix.runner }}
           path: storage-benchmark.json
+      - name: Export matched memory profiles
+        run: |
+          out=$(nix build .#memory-profile --no-update-lock-file --no-link --print-out-paths)
+          cp "$out/memory-profile.json" memory-profile.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memory-profile-${{ matrix.runner }}
+          path: memory-profile.json
       - name: Build and run app outside the checkout
         run: bash tests/flake-app.sh
   rage:
