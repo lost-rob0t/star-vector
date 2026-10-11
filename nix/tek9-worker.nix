@@ -1,5 +1,9 @@
 { pkgs, source, lispPackages, lispRegistry, profileScript ? null }:
 let
+  # A trailing empty registry entry inherits XDG/system installations. Those can
+  # replace the explicitly loaded ASD with the installed copy, whose FASLs are
+  # absent from this read-only cache. Pin the application and producer sources.
+  workerRegistry = "${source}/lisp//:${lispRegistry}";
   loadSystem = pkgs.lib.escapeShellArgs [
     "--eval" "(require :asdf)"
     "--eval" "(asdf:load-system :cffi)"
@@ -11,7 +15,7 @@ in pkgs.runCommand "star-vector-tek9-worker" {
   nativeBuildInputs = [ pkgs.sbcl pkgs.stdenv.cc ] ++ lispPackages;
 } ''
   export XDG_CACHE_HOME="$out/lib/cache"
-  export CL_SOURCE_REGISTRY="${lispRegistry}:"
+  export CL_SOURCE_REGISTRY="${workerRegistry}"
   mkdir -p "$out/bin"
   # Compile once during packaging, preserving CFFI's generated shared objects.
   sbcl --noinform --non-interactive --no-userinit --no-sysinit ${loadSystem}
@@ -22,7 +26,7 @@ in pkgs.runCommand "star-vector-tek9-worker" {
   cat > "$out/bin/star-vector-tek9-worker" <<EOF
   #!${pkgs.runtimeShell}
   export XDG_CACHE_HOME="$out/lib/cache"
-  export CL_SOURCE_REGISTRY="${lispRegistry}:"
+  export CL_SOURCE_REGISTRY="${workerRegistry}"
   exec ${pkgs.sbcl}/bin/sbcl --noinform --non-interactive --no-userinit --no-sysinit \
     ${loadSystem} \
     ${if profileScript == null then "" else "--load \"$out/lib/profile.fasl\""} \

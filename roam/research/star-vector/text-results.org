@@ -86,6 +86,16 @@ applicable; no ANN implementation or history API is introduced here.
 
 * Contradictions
 
+Native x86_64 CI at 1f16a919 passed the numeric package, including the existing
+crash/concurrency/migration suite that was locally blocked. The separate text
+derivation exposed an ASDF registry collision. Diagnostic run 38154963175 at
+083c09c5 showed ASDF selecting the installed worker ASD and trying to compile
+that copy into the original worker's read-only Nix cache. The worker now pins
+its application sources first and omits the empty inherited-registry entry;
+the standalone startup check remains to cover this packaged coexistence case.
+Final-head validation is still required. See the ASDF primary specification:
+https://asdf.common-lisp.dev/asdf/Shell_002dfriendly-syntax-for-configuration.html
+
 The restored shell was working at 15:56:28 UTC despite an external environment
 disconnect report. Git push lacked authentication, while the authenticated
 GitHub connector successfully published the scale checkpoint. Hugging Face
