@@ -244,6 +244,14 @@ It trades additional startup work for predictable repeated-search residency;
 keep handles open across operations. Total RSS/PSS across repeated searches,
 not only live object bytes, must substantiate a memory improvement.
 
+At =2ebd35f=, native PR run =38118774269= measured 50k rows with ten searches:
+worker RSS after the tenth search fell from 579 to 339 MiB on x86 and from
+496 to 336 MiB on ARM; first-scan allocation fell 66% / 71%. Parent RSS stayed
+about 31 / 33 MiB. This is a sustained-search tradeoff: idle worker RSS rose
+from about 84 / 78 to 140 / 138 MiB, and instrumented open time rose from
+54 / 54 ms to 935 / 1098 ms. Small or short-lived workloads may cost more.
+The design notes record PSS, live heap, latency, artifacts and measurement limits.
+
 * RAGE workflow
 
 Research, approved design, and implementation evidence live under =roam/=. The

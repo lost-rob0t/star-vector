@@ -248,6 +248,10 @@ def compare(before, after, output):
             summary[label] = dict(first_search_seconds=first["seconds"], allocated_bytes=first["allocated_bytes"],
                 callback_allocated_bytes=first["heap"]["callback_allocated_bytes"],
                 sampled_dynamic_peak_bytes=first["heap"]["sampled_dynamic_peak_bytes"],
+                repeated_sampled_peaks={key: max(r["sampled_peaks"][worker_pid][key]
+                    for r in profile["repeated"]) for key in first["sampled_peaks"][worker_pid]},
+                repeated_allocated_bytes=[r["allocated_bytes"] for r in profile["repeated"]],
+                repeated_gc_counts=[r["gc_count"] for r in profile["repeated"]],
                 worker_peak=first["sampled_peaks"][worker_pid],
                 parent_peak=next(value for pid, value in first["sampled_peaks"].items() if pid != worker_pid),
                 opened=profile["opened"], reopen_seconds=profile["reopen_seconds"],
