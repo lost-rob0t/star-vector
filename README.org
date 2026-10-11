@@ -32,15 +32,15 @@ Lisp ASDF system. Run the packaged CLI with =nix run=.
 * Command-line client
 
 Vectors are comma-separated decimal values and every operation states the fixed
-store dimension. The store is an atomic JSON snapshot and is suitable for one
-writer process at a time.
+store dimension. New persistent stores are Tek9/LMDB directories with transactional writes
+coordinated across processes. Existing JSON files are read-only legacy snapshots.
 
 #+begin_src sh
-star-vector init vectors.json 3
-star-vector upsert vectors.json 3 document.json 1,0,0
-star-vector get vectors.json 3 doc:example
-star-vector search vectors.json 3 cosine 10 1,0,0
-star-vector delete vectors.json 3 doc:example
+star-vector init vectors.tek9 3
+star-vector upsert vectors.tek9 3 document.json 1,0,0
+star-vector get vectors.tek9 3 doc:example
+star-vector search vectors.tek9 3 cosine 10 1,0,0
+star-vector delete vectors.tek9 3 doc:example
 #+end_src
 
 =document.json= must contain a supported canonical StarIntel document. At
@@ -60,7 +60,7 @@ minimum, a generic document has fields like:
 #+begin_src nim
 import star_vector
 
-let store = openVectorStore("vectors.json", 3)
+let store = openVectorStore("vectors.tek9", 3)
 defer: store.close()
 
 store.upsertDocument(document, @[1.0'f32, 0.0'f32, 0.0'f32])
@@ -77,7 +77,7 @@ that handle.
 
 #+begin_src c
 sv_store_t store = NULL;
-sv_open("vectors.json", 3, &store);
+sv_open("vectors.tek9", 3, &store);
 sv_upsert_document(store, document_json, vector, 3);
 sv_search_json(store, query, 3, SV_METRIC_COSINE, 10, &results_json);
 sv_string_free(results_json);
@@ -94,7 +94,7 @@ loader path.
 #+begin_src lisp
 (asdf:load-system "star-vector")
 
-(star-vector:with-store (store "vectors.json" 3)
+(star-vector:with-store (store "vectors.tek9" 3)
   (star-vector:upsert-document store document-json #(1.0 0.0 0.0))
   (star-vector:search store #(1.0 0.0 0.0) :cosine 10))
 #+end_src

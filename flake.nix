@@ -28,14 +28,16 @@
           ];
           lispRegistry = pkgs.lib.concatMapStringsSep ":" (package: "${package}//") lispPackages;
           worker = pkgs.runCommand "star-vector-tek9-worker" {
-            nativeBuildInputs = [ pkgs.sbcl ] ++ lispPackages;
+            nativeBuildInputs = [ pkgs.sbcl pkgs.stdenv.cc ] ++ lispPackages;
           } ''
-            export XDG_CACHE_HOME="$TMPDIR/cache"
+            export XDG_CACHE_HOME="$out/lib/cache"
             export CL_SOURCE_REGISTRY="${lispRegistry}:"
             mkdir -p "$out/bin"
             sbcl --noinform --non-interactive --no-userinit --no-sysinit \
               --eval '(require :asdf)' \
-              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")' \
+              --eval '(asdf:load-system :cffi)' \
+              --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
+              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")'  \
               --eval '(asdf:load-system "star-vector-tek9")' \
               --eval "(sb-ext:save-lisp-and-die \"$out/bin/star-vector-tek9-worker\" :toplevel #'star-vector-tek9:run :executable t)"
           '';
