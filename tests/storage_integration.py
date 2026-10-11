@@ -206,6 +206,16 @@ def main(cli, library):
             worker.kill(); worker.wait(timeout=10)
         finally:
             if worker.poll() is None: worker.kill(); worker.wait()
+        # Kill while the producer transaction contains uncommitted data AND metadata.
+        transaction = subprocess.Popen([
+            "sbcl", "--noinform", "--non-interactive", "--no-userinit", "--no-sysinit",
+            "--load", str(Path(__file__).with_name("tek9_crash_transaction.lisp"))],
+            env=os.environ | {"SV_TEST_STORE": str(from_worker)}, stdout=subprocess.PIPE, text=True)
+        try:
+            assert transaction.stdout.readline().strip() == "transaction-open"
+            transaction.kill(); transaction.wait(timeout=10)
+        finally:
+            if transaction.poll() is None: transaction.kill(); transaction.wait()
         assert command("migrate", source, from_worker, 3)["complete"]
         assert command("get", from_worker, 3, "old:269") == document("old:269")
 

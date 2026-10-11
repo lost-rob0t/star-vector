@@ -75,6 +75,7 @@
             checkPhase = ''
               runHook preCheck
               export STAR_VECTOR_TEK9_WORKER="${worker}/bin/star-vector-tek9-worker"
+              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.lmdb.out ]}"
               export HOME="$TMPDIR/home"
               export XDG_CACHE_HOME="$TMPDIR/cache"
               export CL_SOURCE_REGISTRY="${lispRegistry}:"
