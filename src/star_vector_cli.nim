@@ -68,6 +68,13 @@ proc main() =
     let limit = if arguments.len == 5: positiveInteger(arguments[4], "max records") else: high(int)
     echo $migrateSnapshot(arguments[1], arguments[2], positiveInteger(arguments[3], "dimensions"), limit)
     return
+  let expected = case command
+    of "init": 3
+    of "upsert": 5
+    of "get", "delete": 4
+    of "search": 6
+    else: 0
+  if arguments.len != expected: usage()
   let path = arguments[1]
   let dimensions = positiveInteger(arguments[2], "dimensions")
   let store = openVectorStore(path, dimensions)
@@ -78,7 +85,7 @@ proc main() =
     if arguments.len != 3:
       usage()
     store.flush()
-    echo $(%*{"format": "star-vector/tek9/1", "dimensions": dimensions})
+    echo $(%*{"format": (if fileExists(path): "star-vector/1" else: "star-vector/tek9/1"), "dimensions": dimensions})
   of "upsert":
     if arguments.len != 5:
       usage()

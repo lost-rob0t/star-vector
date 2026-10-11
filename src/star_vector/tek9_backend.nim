@@ -1,4 +1,4 @@
-import std/[json, os, osproc, streams]
+import std/[json, locks, os, osproc, streams]
 when defined(posix): import std/posix
 
 type Tek9Backend* = ref object
@@ -6,6 +6,9 @@ type Tek9Backend* = ref object
   failed: bool
 
 const tek9Worker* {.strdefine.} = "star-vector-tek9-worker"
+
+var spawnLock: Lock
+initLock(spawnLock)
 
 proc stop*(backend: Tek9Backend) =
   if backend.isNil or backend.process.isNil: return
@@ -66,21 +69,26 @@ proc request*(backend: Tek9Backend, value: JsonNode): JsonNode =
 proc openTek9*(path: string, dimensions: int, source = "", total = 0): Tek9Backend =
   new(result)
   let worker = getEnv("STAR_VECTOR_TEK9_WORKER", tek9Worker)
-  result.process = startProcess(worker, options = {poUsePath})
   try:
-    when defined(posix):
-      # Other handles' children must not inherit this worker's pipe endpoints.
-      for fd in [result.process.inputHandle, result.process.outputHandle,
-                 result.process.errorHandle]:
-        if fcntl(fd, F_SETFD, FD_CLOEXEC) == -1: raiseOSError(osLastError())
+    acquire(spawnLock)
+    try:
+      result.process = startProcess(worker, options = {poUsePath})
+      when defined(posix):
+        # Serialize starts so other handles cannot inherit these endpoints
+        # before their close-on-exec flags have been installed.
+        for fd in [result.process.inputHandle, result.process.outputHandle,
+                   result.process.errorHandle]:
+          if fcntl(fd, F_SETFD, FD_CLOEXEC) == -1: raiseOSError(osLastError())
+    finally:
+      release(spawnLock)
     var message = %*{"op": "open", "path": absolutePath(path), "dimensions": dimensions}
     if source.len > 0:
       message["source"] = %source
       message["total"] = %total
     discard result.request(message)
-  except CatchableError:
+  except CatchableError as error:
     result.stop()
-    raise
+    raise newException(IOError, "Tek9 worker startup failed: " & error.msg)
 
 proc close*(backend: Tek9Backend) =
   if backend.isNil or backend.process.isNil: return

@@ -121,6 +121,13 @@ def main(cli, library):
             list(pool.map(writer, range(12)))
         a = client.open(path)
         assert client.lib.sv_len(a) == 15
+        def handle_writer(i):
+            handle = client.open(path)
+            try: client.check(client.put(handle, f"thread:{i}"), handle)
+            finally: client.check(client.lib.sv_close(handle))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(handle_writer, range(8)))
+        assert client.lib.sv_len(a) == 23
         # Every metric's bounded prefix matches its full exact ordering, including ties.
         for metric in range(4):
             all_rows = client.search(a, metric, 100)
