@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures
 import ctypes as C
 import gc
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -74,6 +75,7 @@ class Faiss:
         self.settings["filter_selector"] = "prebuilt exact eligible ID sets; construction excluded from query latency"
 
     def query(self, q, bucket=1000):
+        original_query = q
         q = np.array(q[None], dtype=np.float32, copy=True)
         self.faiss.normalize_L2(q)
         params = None
@@ -87,7 +89,7 @@ class Faiss:
         if self.name == "pq" and len(found):
             # Exact float64 rerank over original vectors, still bounded by candidate count.
             vectors = np.asarray(self.x[found], dtype=np.float64)
-            query = q[0].astype(np.float64)
+            query = np.asarray(original_query, dtype=np.float64)
             scores = (vectors @ query) / (np.linalg.norm(vectors, axis=1) * np.linalg.norm(query))
             found = found[np.lexsort((found, -scores))[:K]]
         return found.tolist()
@@ -188,7 +190,8 @@ class Qdrant:
             env = os.environ | {"QDRANT__STORAGE__STORAGE_PATH": str(args.qdrant_storage),
                                 "QDRANT__SERVICE__HTTP_PORT": "16333", "QDRANT__SERVICE__GRPC_PORT": "16334",
                                 "QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS": "4", "QDRANT__TELEMETRY_DISABLED": "true"}
-            self.process = subprocess.Popen([args.qdrant_binary], cwd=self.temporary.name, env=env, stdout=self.server_log, stderr=subprocess.STDOUT)
+            self.launch = dict(args=[args.qdrant_binary], cwd=self.temporary.name, env=env, stdout=self.server_log, stderr=subprocess.STDOUT)
+            self.process = subprocess.Popen(**self.launch)
             deadline = time.monotonic()+20
             while True:
                 if self.process.poll() is not None:
@@ -261,11 +264,14 @@ class Qdrant:
                     reopen="not executed; collection count is not a server restart test")
 
     def close(self):
-        self.call("DELETE", "/collections/"+self.name)
-        self.session.close()
-        if self.process:
-            self.process.terminate(); self.process.wait(timeout=20)
-            self.server_log.close(); self.temporary.cleanup()
+        try:
+            if hasattr(self, "name"):
+                self.call("DELETE", "/collections/"+self.name)
+        finally:
+            self.session.close()
+            if self.process:
+                self.process.terminate(); self.process.wait(timeout=20)
+                self.server_log.close(); self.temporary.cleanup()
 
 
 class StarVector:
@@ -308,7 +314,8 @@ class StarVector:
         return dict(rows=n, update_seconds=update, delete_seconds=elapsed, count=len(x)-n)
 
     def close(self):
-        self.client.check(self.client.lib.sv_close(self.handle))
+        if hasattr(self, "handle"):
+            self.client.check(self.client.lib.sv_close(self.handle))
         # Persisted synthetic paths are retained for explicit reopen/concurrency experiments.
 
 
@@ -321,6 +328,11 @@ def run(args):
     truth = np.load(root / "truth.npz")
     result = dict(manifest=manifest, environment=environment(), backend=args.backend, method=args.method,
                   cache="warm after disjoint tuning/warmup; no claim of OS cold cache", filters=[])
+    result["source_files_sha256"] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                     for p in Path(__file__).parent.glob("scale*.py")}
+    result["query_sha256"] = hashlib.sha256((root / "queries.npy").read_bytes()).hexdigest()
+    result["library_sha256"] = hashlib.sha256(Path(args.library).read_bytes()).hexdigest() if args.library else None
+    result["qdrant_binary_sha256"] = hashlib.sha256(Path(args.qdrant_binary).read_bytes()).hexdigest() if args.qdrant_binary else None
     backend = None
     failure = None
     before_io = psutil.Process().io_counters()._asdict()
@@ -365,6 +377,9 @@ def run(args):
                 result["concurrency"] = dict(clients=4, qps=len(durations)/(time.perf_counter()-start), **percentile(durations))
             else:
                 result["concurrency"] = dict(status="separate independent-handle experiment required")
+            if args.lifecycle:
+                from scale_lifecycle import lifecycle
+                result["lifecycle"] = lifecycle(backend, x, queries, truth)
             if hasattr(backend, "mutate"):
                 result["mutations"] = backend.mutate(x)
             else:
@@ -376,6 +391,7 @@ def run(args):
         finally:
             result["process_io_before"] = before_io
             result["process_io_after"] = psutil.Process().io_counters()._asdict()
+            result["memory_before_close"] = sampler.snapshot()
             if backend is not None:
                 try:
                     backend.close()
@@ -406,6 +422,7 @@ def main():
     bench.add_argument("--server-pid", type=int)
     bench.add_argument("--qdrant-storage", type=Path)
     bench.add_argument("--qdrant-binary", type=str, help="Start a pinned local server as a measured child; loopback port 16333 must be free")
+    bench.add_argument("--lifecycle", action="store_true", help="Run representative independent-handle concurrency and reopen experiments")
     args = parser.parse_args()
     if args.command == "generate":
         print(json.dumps(generate(args.data, args.records, args.dimensions, args.queries, args.distribution)))

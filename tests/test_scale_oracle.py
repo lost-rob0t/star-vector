@@ -43,6 +43,16 @@ class OracleTests(unittest.TestCase):
         self.assertEqual(r["id_recall"], 0)
         self.assertEqual(r["tie_recall"], 1)
         self.assertEqual(recall([2, 2], ids[0], scores[0], x, q[0])["invalid"], 1)
+        self.assertEqual(recall([-1, 3, 0], ids[0], scores[0], x, q[0])["invalid"], 2)
+
+    def test_zero_and_nonfinite_contract(self):
+        x = np.array([[0, 0], [1, 0], [-1, 0]], dtype=np.float32)
+        q = np.array([[1, 0]], dtype=np.float32)
+        self.assertEqual(oracle(x, q)[0].tolist(), [[1, 2]])
+        with self.assertRaises(ValueError):
+            oracle(x, np.zeros_like(q))
+        with self.assertRaises(ValueError):
+            oracle(np.array([[float("nan"), 0]], dtype=np.float32), q)
 
 
 if __name__ == "__main__":

@@ -108,6 +108,68 @@ loader path.
 The search result is JSON so the ABI remains language-neutral and document
 payloads retain their canonical StarIntel representation.
 
+* Scale experiments and exact metric contract
+
+=tests/metric_contract.py= checks the actual C ABI against an independent
+scalar float64 oracle over float32 inputs, both transient and reopened Tek9.
+It covers cosine, dot, Euclidean and Manhattan, dimensions through 1536,
+non-unit vectors, zero handling, non-finite/dimension errors and exact ID ties.
+Both native Nix architectures run this test alongside CLI/C/Lisp, concurrency,
+crash and migration checks.
+
+The optional benchmark environment is separate from the product dependency
+graph. =benchmarks/requirements-scale.txt= pins the numerical/library/database
+clients. =scale.py generate= creates only deterministic synthetic inputs and
+eligible-corpus ground truths. =scale.py run= executes one isolated method;
+=scale_matrix.py= serializes the matrix and records skipped/failed cells.
+Use a fresh output directory; result files are never silently overwritten.
+
+#+begin_src sh
+python3 -m venv /tmp/sv-scale-env
+/tmp/sv-scale-env/bin/pip install -r benchmarks/requirements-scale.txt
+/tmp/sv-scale-env/bin/python benchmarks/scale.py generate \
+  --data /tmp/sv-scale-10k128 --records 10000 --dimensions 128
+/tmp/sv-scale-env/bin/python benchmarks/scale.py run \
+  --data /tmp/sv-scale-10k128 --output /tmp/sv-faiss-flat.json \
+  --backend faiss --method flat
+#+end_src
+
+Faiss methods exercised by the harness are =flat=, =hnsw=, =ivf= and =pq=
+(IVF-PQ with 100 candidates reranked from original float32 vectors using
+float64 arithmetic). The product itself still exposes exact search only.
+For =--backend starvector=, pass =--library= and choose =--method transient=
+or =--method tek9=; the latter uses the packaged =STAR_VECTOR_TEK9_WORKER=.
+=--backend sqlite= loads the real SQLite-vec extension. =--backend qdrant=
+uses an actual Qdrant server, never the client's local emulation mode.
+
+The recorded Qdrant baseline is version 1.16.3, pinned by image digest
+=qdrant/qdrant@sha256:0425e3e03e7fd9b3dc95c4214546afe19de2eb2e28ca621441a56663ac6e1f46=.
+The local experiment extracts that image's server executable and launches it
+as a child with =--qdrant-binary=, so process-tree RSS/PSS and file-backed
+pages are included. Its loopback ports are 16333/16334. A compatible host
+runtime is required; the result records the actual server version and binary
+checksum. An external =--qdrant= endpoint is also supported but requires
+separate server accounting. Version 1.16.3 is a fixed baseline, not a claim
+about the latest release.
+
+Interpret lanes separately. Faiss is an in-process numerical/index library;
+StarVector transient includes C ABI result JSON and document handling.
+SQLite is embedded; Tek9 adds a producer worker and per-row JSON/validation;
+Qdrant uses HTTP JSON and returns document payloads. SQLite/Qdrant ingest
+batches contain 128 rows; current public StarVector ingress is single-row.
+LMDB full durability, SQLite WAL/FULL and Qdrant wait=true acknowledgments
+are recorded explicitly and are not interchangeable durability claims.
+Keep transport, payload, transaction size and validation costs visible when
+comparing results. The synthetic filler is compressible and is not a real
+StarIntel evidence corpus.
+
+The current product has no metadata filter, revision-tier router or ANN index.
+Filtered benchmark queries use an eligible-corpus oracle, and unsupported
+product cells are explicit. Reopening a process retains OS cache; no true
+cold-cache result is inferred. See the [[file:roam/design/star-vector/tiered-search.org][active/history design]] for proposed
+Tek9-authoritative, compatible and rebuildable index generations. Billion-row
+capacity arithmetic is a design bound, not executed scale evidence.
+
 * StarIntel schema authority
 
 =schema/starintel-schema.lock.json= pins the canonical Star-Lang repository and

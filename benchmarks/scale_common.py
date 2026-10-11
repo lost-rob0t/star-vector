@@ -74,6 +74,7 @@ class Sampler:
         self.extra_pids = extra_pids
         self.peaks = {}
         self.samples = 0
+        self.io_max = {}
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.loop, daemon=True)
 
@@ -81,6 +82,14 @@ class Sampler:
         pids = {os.getpid(), *self.extra_pids}
         pids.update(p.pid for p in psutil.Process().children(recursive=True))
         rows = {str(pid): process_memory(pid) for pid in pids}
+        for pid in pids:
+            try:
+                counters = psutil.Process(pid).io_counters()._asdict()
+                previous = self.io_max.setdefault(str(pid), {})
+                for key, value in counters.items():
+                    previous[key] = max(previous.get(key, 0), value)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
         unavailable = [pid for pid, row in rows.items() if row is None]
         rows = {pid: row for pid, row in rows.items() if row is not None}
         totals = {key: sum(row[key] for row in rows.values()) for key in ("rss_kib", "pss_kib", "anonymous_kib", "file_rss_kib")}
@@ -102,12 +111,16 @@ class Sampler:
     def result(self):
         return dict(interval_ms=100, samples=self.samples, peak_sum_kib=self.peaks,
                     start=self.start, end=self.end,
+                    process_io_max=self.io_max,
                     note="RSS sums can double-count shared pages; PSS apportions them. File RSS includes COW pages; anonymous and file classifications can overlap.")
 
 
 def normalized64(x):
     y = np.asarray(x, dtype=np.float64)
-    return y / np.linalg.norm(y, axis=1, keepdims=True)
+    norms = np.linalg.norm(y, axis=1, keepdims=True)
+    if not np.isfinite(y).all() or np.any(norms == 0):
+        raise ValueError("cosine normalization requires finite nonzero vectors")
+    return y / norms
 
 
 def oracle(x, queries, k=K, bucket_limit=1000):
@@ -118,6 +131,12 @@ def oracle(x, queries, k=K, bucket_limit=1000):
     for offset in range(0, len(x), 8192):
         block_ids = np.arange(offset, min(offset + 8192, len(x)))
         block_ids = block_ids[block_ids % 1000 < bucket_limit]
+        if not len(block_ids):
+            continue
+        raw = np.asarray(x[block_ids], dtype=np.float64)
+        if not np.isfinite(raw).all():
+            raise ValueError("oracle corpus contains non-finite vectors")
+        block_ids = block_ids[np.linalg.norm(raw, axis=1) != 0]
         if not len(block_ids):
             continue
         block = normalized64(x[block_ids])
@@ -138,8 +157,8 @@ def oracle(x, queries, k=K, bucket_limit=1000):
 
 
 def recall(found, truth_ids, truth_scores, x, query, bucket_limit=1000):
-    found = [int(i) for i in found if 0 <= int(i) < len(x)]
-    eligible = [i for i in found if i % 1000 < bucket_limit]
+    found = list(map(int, found))
+    eligible = sorted({i for i in found if 0 <= i < len(x) and i % 1000 < bucket_limit})
     if not len(truth_ids):
         return dict(id_recall=float(not found), tie_recall=float(not found), invalid=len(found))
     expected = set(map(int, truth_ids))
@@ -149,7 +168,7 @@ def recall(found, truth_ids, truth_scores, x, query, bucket_limit=1000):
     tied = {i for i, value in zip(eligible, values) if value >= boundary - 1e-12}
     return dict(id_recall=len(set(eligible) & expected) / len(expected),
                 tie_recall=min(len(tied), len(expected)) / len(expected),
-                invalid=len(found) - len(eligible) + len(found) - len(set(found)))
+                invalid=len(found) - len(eligible))
 
 
 def generate(root, count, dimensions, queries=1000, distribution="clustered"):

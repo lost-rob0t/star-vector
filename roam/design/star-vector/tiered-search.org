@@ -1,0 +1,173 @@
+:PROPERTIES:
+:ID: 64b29e7c-5a48-4c5f-9fa0-ea8e201ab65d
+:END:
+#+title: Searchable active vectors and immutable history at large scale
+#+description: Proposed Tek9-authoritative shards, compatible rebuildable search generations and history semantics; not an implemented billion-row service.
+#+status: DRAFT
+#+filetags: :star-vector:architecture:starintel:scale:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Investigation scope | User | APPROVED | Billion active plus historical layers request | Issue 9 |
+| Architecture acceptance | Independent reviewer | PENDING | Measured alternatives, workload and consistency review | PR 10 and scale report |
+| Sharded/indexed implementation | Implementing agent | NOT STARTED | Scoped producer and consumer designs with executable consistency tests | This document is a proposal |
+
+* Verified present behavior and limits
+
+The product imports the pinned Tek9 producer and stores validated StarIntel
+0.10.1 documents plus float32 vectors. Its exact cosine/dot/Euclidean/Manhattan
+search streams a single LMDB read snapshot, decodes and validates every row,
+and retains O(k) results. It has no metadata predicate, ANN index, partition
+router, revision history API or model-compatibility enforcement beyond vector
+dimension. An upsert replaces the same ID. Current LMDB maps have a fixed
+16 GiB virtual size. These facts rule out calling the current implementation
+a tested billion-active system. The benchmark's Faiss and Qdrant methods are
+external experiments, not newly exposed StarVector API methods.
+
+Active means eligible to search; it does not mean resident in RAM. Historical
+evidence can remain logically current. Logical revision/validity state and
+physical hot/warm/cold placement must remain independent.
+
+* Capacity arithmetic, not a performance forecast
+
+For N vectors of dimension d, raw float32 storage alone is N*d*4 bytes.
+The following are decimal units and exclude indexes, documents, allocator
+overhead, replicas, tombstones, free pages, build scratch and historical data.
+
+| Billion vectors | Raw float32 | Raw float16 | 16-byte PQ codes alone |
+|-----------------+-------------+-------------+------------------------|
+| 128 dimensions  | 512 GB      | 256 GB      | 16 GB                  |
+| 384 dimensions  | 1.536 TB    | 768 GB      | 16 GB                  |
+| 768 dimensions  | 3.072 TB    | 1.536 TB    | 16 GB                  |
+| 1536 dimensions | 6.144 TB    | 3.072 TB    | 16 GB                  |
+
+PQ codes alone omit IDs, codebooks, graph/list structures and original vectors
+needed for exact reranking. Quantized candidates are approximate; precision
+and recall must be measured for each real embedding model. One KiB of
+document content per billion rows adds 1.024 TB before serialization/indexing.
+Immutable historical revisions add to N; they are not free archival pointers.
+The attached machine has 16 GiB and four CPU quota units, not the user's
+unattached 256 GB host. Shard counts and hardware budgets require actual
+document sizes, retention volumes, latency targets and ingest rates.
+
+* Proposed authority, revisions and placement
+
+Keep Tek9 authoritative for vector/document identity, revision state,
+provenance and generation manifests. A search index is disposable derived
+state. Rebuilding or losing it must not lose source records. Exported segment
+files, if introduced, belong to an explicit producer-backed storage contract;
+do not replace Tek9 with copied storage logic or silently adopt another DB.
+
+Use an internal immutable revision key containing document ID, revision and
+embedding compatibility key, plus a current-revision pointer. Store the
+canonical document's =rev=, =rootId=, =validFrom=, =validUntil=, =collectedAt=,
+=provenance= and source hashes where appropriate. Put embedding-specific
+metadata under the schema's =extensions= field rather than inventing top-level
+fields. A new embedding model creates a distinct compatible collection;
+equal dimension alone does not make two vector spaces comparable.
+
+Logical queries select latest, as-of, or all valid revisions and apply
+dataset/tenant predicates and tombstones before candidate evaluation.
+Physical placement chooses active mutable Tek9 shards, immutable searchable
+segments on local SSD, or older segments on slower storage. Older timestamps
+must not automatically remove still-current evidence from the search set.
+History compaction preserves the revisions required by the chosen logical
+query semantics. Existing destructive same-ID upsert behavior cannot silently
+be reinterpreted as this proposed revision model; introduce it explicitly.
+
+Route first by embedding compatibility and required tenant/dataset scope,
+then by stable shard/segment metadata. Benchmark both broad cross-dataset
+queries and selective predicates; avoid one tiny shard per low-cardinality
+combination. A single LMDB environment serializes writes. Multiple bounded
+environments can partition that contention, but require explicit routing,
+atomic manifest publication and recovery rules.
+
+* Rebuildable index boundary and consistency
+
+The compatibility key must include model identifier and immutable model
+digest/version, preprocessing/tokenization version, vector dimension,
+input precision, normalization policy, metric and score semantics.
+Cosine needs nonzero vectors and normalization of both index and query copies
+for inner-product retrieval. Preserve original float32 vectors for the
+existing float64 exact score and ID tie contract. Euclidean is the square
+root of squared L2; changing units would break the current API. Dot product
+must not inherit cosine normalization. L1 is a distinct supported metric.
+
+A proposed generation manifest identifies:
+- producer snapshot/change-sequence boundary and source shard identities;
+- compatibility key, document revision selection and tombstone watermark;
+- index method/library/version, parameters, training sample seed and digest;
+- segment ranges, row counts, source and index checksums, and publication state.
+
+The producer must expose an auditable consistent change sequence or immutable
+snapshot export before incremental index publication is implemented. Its
+current cursor gives one read snapshot but does not provide the complete
+cross-shard generation protocol. A separately scoped minimal Tek9 export is
+preferable to reaching into private internals or inventing transaction IDs.
+
+Build an index from a fixed snapshot, verify counts/checksums/recall, replay
+any admitted changes through a defined watermark, then publish the manifest
+atomically. Queries pin one generation and its corresponding immutable
+revisions. Return candidates as revision-qualified IDs with that generation;
+fetch originals from the same revision view for exact reranking. A current
+unversioned get after ANN retrieval can return the wrong revision and is not
+a consistent implementation. Failed/incomplete builds remain unpublished.
+Retain the prior generation until readers release it. Crash tests must cover
+every publish boundary, stale candidates, deletes, updates and rebuilds.
+
+An exact mode must scan every eligible segment. Approximate modes must state
+their candidate budget and measured recall. Merge segment candidates by the
+same metric and deterministic ID/revision ordering only after compatibility
+and generation checks. Global top-k followed by filtering is incomplete:
+eligible neighbors may never enter the candidate set. Native predicate-aware
+ANN, eligible-ID selectors, or exact fallback over a small eligible subset
+are candidate strategies; test against the identical filtered oracle.
+
+* Methods and next experiments
+
+Preserve exact search as correctness oracle, small eligible-set fallback and
+final reranker. The present optimization only reuses redundant cosine norms.
+Faiss Flat measures optimized dense arithmetic; HNSW explores memory/recall
+tradeoffs; IVF-flat and IVF-PQ explore candidate partitioning and compression.
+The benchmark tunes on disjoint queries and reports misses after filtering.
+Qdrant is an independent server comparison with its actual payload, indexing
+and acknowledgment behavior, not a replacement for authoritative Tek9.
+
+A provider interface should allow HNSW, IVF/PQ and disk-oriented methods to
+be replaced without changing the producer authority or API score contract.
+Do not implement every method before evidence identifies a useful tradeoff.
+DiskANN's current main branch is a Rust DiskANN3/DataProvider implementation;
+the older C++ branch is a separate legacy path. Integration, L1 support,
+filtered behavior, updates, portability and recovery all need actual tests.
+No DiskANN execution is claimed by the current matrix.
+
+LMDB readers hold old page versions until their snapshots end. Long scans
+can delay page reuse while writers continue. The lifecycle benchmark records
+snapshot duration, consistent revisions, write latency and file growth while
+a reader is pinned, then after release. At larger scale, immutable segment
+generation avoids keeping a mutable environment's reader open for an entire
+cross-shard export; designing that protocol is separate from weakening
+snapshot consistency. Cold-cache tests must verify eviction; reopening a
+process while OS cache remains warm is a different measurement.
+
+* Primary sources
+
+Retrieved 2026-10-11. These sources inform design alternatives; they do not
+constitute measurements of StarVector or its synthetic workload.
+
+- https://github.com/facebookresearch/faiss/wiki/MetricType-and-distances
+- https://github.com/facebookresearch/faiss/wiki/Faiss-indexes
+- https://github.com/facebookresearch/faiss/wiki/Indexes-that-do-not-fit-in-RAM
+- https://github.com/microsoft/DiskANN
+- https://github.com/openldap/openldap/blob/master/libraries/liblmdb/lmdb.h
+- https://raw.githubusercontent.com/qdrant/qdrant/v1.16.3/config/config.yaml
+- https://qdrant.tech/documentation/tutorials-operations/large-scale-search/
+- https://alexgarcia.xyz/sqlite-vec/features/vec0.html
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Propose Tek9-authoritative active/history generations and compatibility boundaries | Codex | Current source, issue 9, primary sources and parent research |
