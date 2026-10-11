@@ -12,7 +12,7 @@
 |---------------+--------------------+-------+-------------------+--------------------|
 | Scope and execution | User | APPROVED | Explicit memory improvement request | Issue 7 and delegated instruction |
 | Profiling design | Implementing agent | APPROVED | Inspected current scan and benchmark code | Observations below |
-| Optimization selection | Implementing agent | PENDING | Actual baseline allocation/mapping measurements | Baseline CI artifacts |
+| Optimization selection | Implementing agent | APPROVED | Native baseline allocation and mapping measurements | Run 38117468264; jobs 114405131289 and 114405131494 |
 | Merge | Independent reviewer | PENDING | Corrected-head review and native CI | Separate PR required |
 
 * Verified observations
@@ -76,3 +76,48 @@ Authored matched memory profiling infrastructure; baseline execution and optimiz
 
 ** Notes
 - This terminal loop records profiling infrastructure only, not measured improvement or native acceptance. Optimization and merge gates remain pending.
+
+* Measured baseline and selected change
+
+Native run 38117468264 at 7675893 passed x86_64 and aarch64 product and
+profiling checks. On the identical 50k synthetic rows, baseline first-scan
+allocation was 2,529,526,784 / 2,528,559,744 bytes (x86/ARM), with callback
+allocation 1,685,895,680 / 1,696,630,016 bytes. Worker peak RSS was
+565,608 / 569,456 KiB, anonymous memory 318,736 / 325,260 KiB, and
+full-GC live dynamic heap 46,063,984 / 45,723,952 bytes. LMDB accounted
+for 201,372 KiB of mapped RSS on each. Unchanged candidate variations
+demonstrate image/runner noise; these figures do not prove a live-data leak.
+
+Select a streaming JSON-string response writer for scan rows. Preserve the
+existing JSON-line fields and escaping semantics; write ordinary character
+runs directly and escape special characters without allocating a full
+response or an escaped copy of the record. Keep producer cursor/decode,
+record storage, Nim parsing/validation, O(k) ranking and transaction lifetime
+unchanged. Add Unicode/control/large-record and overlapping-writer snapshot
+regressions. Measure actual effects; no heap-limit change or forced production
+GC is authorized as a substitute for reduced allocation.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: df3d0929-dd03-497f-bd2a-de8c1e8b036d
+:RECORDED_AT: 2026-10-11T06:22:43+00:00
+:END:
+
+** Summary
+Stream existing scan JSON responses without full-record escaped and envelope copies; native measurement pending.
+
+** Files
+- lisp/json-stream.lisp
+- lisp/tek9-worker.lisp
+- tests/json_stream.py
+- tests/storage_integration.py
+
+** Tests
+- Local SBCL encoder versus Python JSON passed controls, Unicode boundaries, supplementary characters, empty and large strings.
+- Nine Python tests and byte compilation passed.
+
+** Commits
+- None
+
+** Notes
+- Production storage format, producer cursor, transactions and Nim API are unchanged. Native integration and measured comparison remain pending.

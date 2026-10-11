@@ -211,6 +211,7 @@ def compare(before, after, output):
         temporary = Path(temporary); path = temporary / "store"
         populate(before / "bin/star-vector-tek9-worker", path)
         result = dict(baseline_revision="0247e40644d3277cf1c4f61337e449f278693688",
+                      candidate_revision=os.environ.get("SV_CANDIDATE_REVISION", "unknown"),
                       records=COUNT, dimensions=DIMENSIONS, document_payload_bytes=1024, k=K,
                       store_bytes=(path / "data.mdb").stat().st_size, variants={})
         def case(root, label, mode):
@@ -247,10 +248,16 @@ def compare(before, after, output):
                 callback_allocated_bytes=first["heap"]["callback_allocated_bytes"],
                 sampled_dynamic_peak_bytes=first["heap"]["sampled_dynamic_peak_bytes"],
                 worker_peak=first["sampled_peaks"][worker_pid],
+                parent_peak=next(value for pid, value in first["sampled_peaks"].items() if pid != worker_pid),
+                opened=profile["opened"], reopen_seconds=profile["reopen_seconds"],
+                reopened_search=profile["reopened_search"]["steady"],
+                after_full_gc=profile["after_full_gc"]["processes"],
                 live_heap_bytes=profile["after_full_gc"]["heap"]["dynamic_used_bytes"],
+                startup_heaps=[e for ev in profile["worker_events"].values() for e in ev if e["phase"] in ("boot", "open")],
                 repeated_worker_steady=[r["steady"]["workers"] for r in profile["repeated"]],
                 multi_natural=profile["multiple_handles"]["warm"]["sum_process_metrics"],
                 multi_collected=profile["multiple_handles"]["after_full_gc"]["sum_process_metrics"],
+                concurrent=profile["multiple_handles"]["concurrent"],
                 timing_seconds=[s for run in variant["timing"] for s in run["seconds"]])
         print("MEMORY_PROFILE_SUMMARY " + json.dumps(summary))
 

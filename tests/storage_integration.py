@@ -82,6 +82,58 @@ def wait_exited(pid):
     assert exited(pid), f"orphan worker {pid} survived parent exit"
 
 
+def scan_protocol_checks(client, root):
+    """Real producer records, including pretty JSON and an overlapping writer."""
+    path = root / "scan-protocol"
+    worker = subprocess.Popen([os.environ["STAR_VECTOR_TEK9_WORKER"]],
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    handle = None
+    def request(value):
+        worker.stdin.write(json.dumps(value) + "\n"); worker.stdin.flush()
+        reply = json.loads(worker.stdout.readline())
+        assert reply["ok"], reply
+        return reply
+    try:
+        request(dict(op="open", path=str(path), dimensions=3))
+        special = document("escape:all")
+        special["rawContent"] = ("".join(map(chr, range(32))) + '"\\/ café 漢字 🙂\u2028\u2029' + "x" * (1024 * 1024))
+        # Preserve valid legacy record strings with actual formatting whitespace
+        # and Unicode: the private RPC must not assume compact ASCII JSON.
+        encoded = json.dumps(dict(document=special, vector=[1, 0, 0]), ensure_ascii=False, indent="\t")
+        request(dict(op="upsert", id=special["id"], record=encoded))
+        handle = client.open(path)
+        assert client.get(handle, special["id"])[1] == special
+        for metric in range(4):
+            assert client.search(handle, metric, 1)[0]["document"] == special
+        client.check(client.lib.sv_close(handle)); handle = None
+        handle = client.open(path)
+        assert client.search(handle, 1, 1)[0]["document"] == special
+
+        # More than the pipe capacity keeps the read transaction alive while a
+        # second handle commits a replacement near the end of the cursor.
+        for i in range(64):
+            doc = document(f"snapshot:{i:03}"); doc["rawContent"] = "old" + "x" * 65536
+            request(dict(op="upsert", id=doc["id"], record=json.dumps(dict(document=doc, vector=[1, 0, 0]))))
+        worker.stdin.write('{"op":"scan"}\n'); worker.stdin.flush()
+        first = json.loads(worker.stdout.readline()); assert first["ok"] and not first.get("end")
+        client.check(client.put(handle, "snapshot:063", (0, 1, 0)), handle)
+        observed = {}
+        row = first
+        while not row.get("end"):
+            assert row["ok"], row
+            observed[row["id"]] = json.loads(row["record"])
+            row = json.loads(worker.stdout.readline())
+        assert len(observed) == 65
+        assert observed["snapshot:063"]["document"]["rawContent"].startswith("old")
+        assert observed["snapshot:063"]["vector"] == [1, 0, 0]
+        assert client.get(handle, "snapshot:063")[1] == document("snapshot:063")
+        assert client.lib.sv_len(handle) == 65
+        request(dict(op="close")); worker.wait(timeout=10)
+    finally:
+        if handle: client.check(client.lib.sv_close(handle))
+        if worker.poll() is None: worker.kill(); worker.wait()
+
+
 def main(cli, library):
     client = Client(library)
     baseline_children = children()
@@ -105,6 +157,7 @@ def main(cli, library):
 
     with tempfile.TemporaryDirectory(prefix="sv-integration-") as root:
         root = Path(root)
+        scan_protocol_checks(client, root)
         # Coordinate simultaneous first creators before any header exists.
         first_create = root / "first-create"
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:

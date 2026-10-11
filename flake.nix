@@ -91,6 +91,7 @@
               python3 scripts/sync.py --check
               python3 scripts/validate-docs.py
               python3 scripts/sync-starintel-schema.py --check
+              python3 tests/json_stream.py
 
               nim c -r --threads:on --mm:orc --path:src \
                 --out:build/test-vector-store tests/test_vector_store.nim

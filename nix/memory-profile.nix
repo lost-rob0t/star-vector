@@ -31,6 +31,7 @@ let
 in pkgs.runCommand "star-vector-memory-profile" {
   nativeBuildInputs = [ pkgs.python3 ];
   buildInputs = [ validatedPackage ]; # Finish ordinary CI workloads before measuring.
+  SV_CANDIDATE_REVISION = candidate.rev or "dirty";
 } ''
   mkdir -p "$out"
   python3 ${candidate}/benchmarks/memory_profile.py \
