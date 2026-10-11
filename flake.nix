@@ -37,6 +37,14 @@
             export XDG_CACHE_HOME="$out/lib/cache"
             export CL_SOURCE_REGISTRY="${lispRegistry}:"
             mkdir -p "$out/bin"
+            # Compile in a disposable process. Save from a fresh FASL-loading
+            # process so compiler allocation does not fragment the core image.
+            sbcl --noinform --non-interactive --no-userinit --no-sysinit \
+              --eval '(require :asdf)' \
+              --eval '(asdf:load-system :cffi)' \
+              --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
+              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")' \
+              --eval '(asdf:load-system "star-vector-tek9")'
             sbcl --noinform --non-interactive --no-userinit --no-sysinit \
               --eval '(require :asdf)' \
               --eval '(asdf:load-system :cffi)' \

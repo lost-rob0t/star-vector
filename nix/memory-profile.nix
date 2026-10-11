@@ -1,6 +1,6 @@
 { pkgs, baseline, candidate, validatedPackage, lispPackages, lispRegistry }:
 let
-  variant = name: source: pkgs.stdenv.mkDerivation {
+  variant = name: source: cleanLoad: pkgs.stdenv.mkDerivation {
     pname = "star-vector-memory-${name}";
     version = "1";
     src = source;
@@ -15,6 +15,14 @@ let
       mkdir -p "$HOME" "$out/bin" "$out/lib"
       nim c -d:release -d:noSignalHandler -d:useMalloc --app:lib --threads:on --mm:orc \
         --path:src --out:"$out/lib/libstar_vector.so" src/star_vector/c_api.nim
+      ${pkgs.lib.optionalString cleanLoad ''
+        sbcl --noinform --non-interactive --no-userinit --no-sysinit \
+          --eval '(require :asdf)' --eval '(require :sb-posix)' \
+          --eval '(asdf:load-system :cffi)' \
+          --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
+          --eval '(asdf:load-asd (truename "lisp/star-vector-tek9.asd"))' \
+          --eval '(asdf:load-system "star-vector-tek9")'
+      ''}
       sbcl --noinform --non-interactive --no-userinit --no-sysinit \
         --eval '(require :asdf)' --eval '(require :sb-posix)' \
         --eval '(asdf:load-system :cffi)' \
@@ -26,8 +34,10 @@ let
     '';
     installPhase = "true";
   };
-  before = variant "baseline" baseline;
-  after = variant "candidate" candidate;
+  # Reproduce each revision's actual image build: the pinned baseline compiles
+  # and saves in one process, while the candidate loads precompiled FASLs.
+  before = variant "baseline" baseline false;
+  after = variant "candidate" candidate true;
 in pkgs.runCommand "star-vector-memory-profile" {
   nativeBuildInputs = [ pkgs.python3 ];
   buildInputs = [ validatedPackage ]; # Finish ordinary CI workloads before measuring.

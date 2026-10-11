@@ -121,3 +121,47 @@ Stream existing scan JSON responses without full-record escaped and envelope cop
 
 ** Notes
 - Production storage format, producer cursor, transactions and Nim API are unchanged. Native integration and measured comparison remain pending.
+
+* Follow-up: saved-core residency
+
+Run 38117877741 passed both architectures at ce6ff4b. Streaming cut first-scan
+allocation from 2.527 GB to 0.840/0.683 GB, with matching result digests.
+First-search RSS fell from 560/588 MiB to 322/320 MiB (x86/ARM), but repeated
+searches reached 577/536 MiB. Live dynamic heap remained about 44 MiB; this is
+not a sustained RSS reduction. The growth is in anonymous copy-on-write pages
+of the saved worker image, not additional LMDB pages.
+
+SBCL 2.6.8 gc-common.c, retrieved 2026-10-11 from the upstream tag, uses
+memset for freed ranges inside the original core mapping instead of
+MADV_DONTNEED, to avoid resurrecting original file bytes. Thus sparse saved
+core regions can become resident when GC clears them. The current image
+process compiles the full ASDF dependency graph before saving.
+
+Execution gate: build the ASDF cache first, then create the saved image from
+a fresh process loading those FASLs. This is a packaging experiment aimed
+at reducing compiler-induced core fragmentation, not a new GC policy or
+heap limit. Preserve cached CFFI libraries and imported Tek9. Compare the
+original one-process baseline against the actual two-process candidate on
+both architectures; retain only if repeated memory/latency data supports it.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 04739d08-9d0c-41dd-93af-28eeeb4044fe
+:RECORDED_AT: 2026-10-11T06:30:52+00:00
+:END:
+
+** Summary
+Build dependency FASLs separately and save the worker from a fresh loader process; measured acceptance pending.
+
+** Files
+- flake.nix
+- nix/memory-profile.nix
+
+** Tests
+- None
+
+** Commits
+- None
+
+** Notes
+- Prior native run proved reduced allocation but not sustained RSS. This experiment targets saved-core fragmentation; no GC policy, memory limit, storage or API changes.
