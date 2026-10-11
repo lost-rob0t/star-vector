@@ -112,6 +112,7 @@
             installPhase = ''
               runHook preInstall
               install -Dm755 build/star-vector "$out/bin/star-vector"
+              ln -s "${worker}/bin/star-vector-tek9-worker" "$out/bin/star-vector-tek9-worker"
               install -Dm755 build/libstar_vector.so "$out/lib/libstar_vector.so"
               install -Dm644 build/storage-benchmark.json "$out/share/star-vector/storage-benchmark.json"
               install -Dm644 include/star_vector.h "$out/include/star_vector.h"

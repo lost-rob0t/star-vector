@@ -136,7 +136,8 @@ def main(cli, library):
         assert command("get", path, 3, "doc:a") == document("doc:a")
 
         # C ABI writes are read by Lisp, Lisp commits read by CLI after close/reopen.
-        env = os.environ | {"STAR_VECTOR_LIBRARY": str(library), "SV_TEST_STORE": str(path)}
+        env = os.environ | {"STAR_VECTOR_LIBRARY": str(library), "SV_TEST_STORE": str(path),
+                                   "C_INCLUDE_PATH": str(Path(__file__).resolve().parents[1] / "include")}
         subprocess.run(["sbcl", "--noinform", "--non-interactive", "--no-userinit", "--no-sysinit",
                         "--load", str(Path(__file__).with_name("bridge_lisp.lisp"))],
                        env=env, check=True, timeout=60)
