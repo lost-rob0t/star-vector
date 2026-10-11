@@ -3,8 +3,11 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+  inputs.tek9.url = "git+https://github.com/lost-rob0t/tek9?rev=e6d1cb86a2e268a894eae3acae9617238b2adcff";
+  inputs.tek9.inputs.nixpkgs.follows = "nixpkgs";
+
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, tek9 }:
     let
       systems = [
         "x86_64-linux"
@@ -17,11 +20,27 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          producer = tek9.packages.${system}.tek9;
           lispPackages = pkgs.lib.closePropagation [
+            producer
             pkgs.sbcl.pkgs.cffi
             pkgs.sbcl.pkgs.cffi-grovel
           ];
           lispRegistry = pkgs.lib.concatMapStringsSep ":" (package: "${package}//") lispPackages;
+          worker = pkgs.runCommand "star-vector-tek9-worker" {
+            nativeBuildInputs = [ pkgs.sbcl pkgs.stdenv.cc ] ++ lispPackages;
+          } ''
+            export XDG_CACHE_HOME="$out/lib/cache"
+            export CL_SOURCE_REGISTRY="${lispRegistry}:"
+            mkdir -p "$out/bin"
+            sbcl --noinform --non-interactive --no-userinit --no-sysinit \
+              --eval '(require :asdf)' \
+              --eval '(asdf:load-system :cffi)' \
+              --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
+              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")'  \
+              --eval '(asdf:load-system "star-vector-tek9")' \
+              --eval "(sb-ext:save-lisp-and-die \"$out/bin/star-vector-tek9-worker\" :toplevel #'star-vector-tek9:run :executable t)"
+          '';
           package = pkgs.stdenv.mkDerivation {
             pname = "star-vector";
             version = "0.1.0";
@@ -31,6 +50,7 @@
               pkgs.nim
               pkgs.python3
               pkgs.sbcl
+              worker
             ]
             ++ lispPackages;
 
@@ -43,16 +63,19 @@
               runHook preBuild
               export HOME="$TMPDIR/home"
               mkdir -p "$HOME"
+              export STAR_VECTOR_TEK9_WORKER="${worker}/bin/star-vector-tek9-worker"
               mkdir -p build
               nim c -d:release --threads:on --mm:orc --path:src \
-                --out:build/star-vector src/star_vector_cli.nim
-              nim c -d:release --app:lib --threads:on --mm:orc --path:src \
-                --out:build/libstar_vector.so src/star_vector/c_api.nim
+                -d:tek9Worker=${worker}/bin/star-vector-tek9-worker --out:build/star-vector src/star_vector_cli.nim
+              nim c -d:release -d:noSignalHandler -d:useMalloc --app:lib --threads:on --mm:orc --path:src \
+                -d:tek9Worker=${worker}/bin/star-vector-tek9-worker --out:build/libstar_vector.so src/star_vector/c_api.nim
               runHook postBuild
             '';
 
             checkPhase = ''
               runHook preCheck
+              export STAR_VECTOR_TEK9_WORKER="${worker}/bin/star-vector-tek9-worker"
+              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.lmdb.out ]}"
               export HOME="$TMPDIR/home"
               export XDG_CACHE_HOME="$TMPDIR/cache"
               export CL_SOURCE_REGISTRY="${lispRegistry}:"
@@ -67,10 +90,13 @@
 
               nim c -r --threads:on --mm:orc --path:src \
                 --out:build/test-vector-store tests/test_vector_store.nim
+              nim c -r --threads:on --mm:orc --path:src \
+                --out:build/test-search-reference tests/test_search_reference.nim
               $CC -std=c11 -Wall -Wextra -Werror -Iinclude tests/test_c_api.c \
                 -Lbuild -lstar_vector -Wl,-rpath,"$PWD/build" \
                 -o build/test-c-api
               build/test-c-api
+              python3 tests/storage_integration.py "$PWD/build/star-vector" "$PWD/build/libstar_vector.so"
               STAR_VECTOR_CLI="$PWD/build/star-vector" bash tests/test_cli.sh
 
               STAR_VECTOR_LIBRARY="$PWD/build/libstar_vector.so" \
@@ -79,13 +105,17 @@
                   --eval '(require :asdf)' \
                   --eval '(asdf:load-asd (truename "lisp/star-vector.asd"))' \
                   --eval '(asdf:test-system "star-vector/tests")'
+              python3 benchmarks/storage_benchmark.py "$PWD/build/libstar_vector.so" \
+                1000,10000,50000 build/storage-benchmark.json
               runHook postCheck
             '';
 
             installPhase = ''
               runHook preInstall
               install -Dm755 build/star-vector "$out/bin/star-vector"
+              ln -s "${worker}/bin/star-vector-tek9-worker" "$out/bin/star-vector-tek9-worker"
               install -Dm755 build/libstar_vector.so "$out/lib/libstar_vector.so"
+              install -Dm644 build/storage-benchmark.json "$out/share/star-vector/storage-benchmark.json"
               install -Dm644 include/star_vector.h "$out/include/star_vector.h"
 
               nimRoot="$out/share/nimble/star_vector"
@@ -134,6 +164,7 @@
         {
           default = package;
           star-vector = package;
+          tek9-worker = worker;
         }
       );
 
@@ -153,7 +184,9 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          producer = tek9.packages.${system}.tek9;
           lispPackages = pkgs.lib.closePropagation [
+            producer
             pkgs.sbcl.pkgs.cffi
             pkgs.sbcl.pkgs.cffi-grovel
           ];
@@ -174,6 +207,7 @@
             ++ pkgs.lib.optional (pkgs ? nimble) pkgs.nimble;
             shellHook = ''
               export CL_SOURCE_REGISTRY="${lispRegistry}:"
+              export STAR_VECTOR_TEK9_WORKER="${self.packages.${system}.tek9-worker}/bin/star-vector-tek9-worker"
             '';
           };
         }

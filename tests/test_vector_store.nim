@@ -16,10 +16,14 @@ suite "vector store":
   setup:
     if fileExists(path):
       removeFile(path)
+    if dirExists(path):
+      removeDir(path)
 
   teardown:
     if fileExists(path):
       removeFile(path)
+    if dirExists(path):
+      removeDir(path)
 
   test "persists valid StarIntel documents and rejects invalid input":
     let store = openVectorStore(path, 3)

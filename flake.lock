@@ -18,7 +18,29 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "tek9": "tek9"
+      }
+    },
+    "tek9": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789848431,
+        "narHash": "sha256-wcv7CWsSQ0GCSkCnNiWNzPPYFtqcoVqSAK3O3XbzkD4=",
+        "ref": "refs/heads/master",
+        "rev": "e6d1cb86a2e268a894eae3acae9617238b2adcff",
+        "revCount": 150,
+        "type": "git",
+        "url": "https://github.com/lost-rob0t/tek9"
+      },
+      "original": {
+        "rev": "e6d1cb86a2e268a894eae3acae9617238b2adcff",
+        "type": "git",
+        "url": "https://github.com/lost-rob0t/tek9"
       }
     }
   },

@@ -1,4 +1,4 @@
-import std/[json, math, strutils, tables]
+import std/[json, locks, math, strutils, tables]
 
 const
   StarIntelReleaseVersion* = "0.10.1"
@@ -42,6 +42,11 @@ proc documentDefinitions(): Table[string, string] =
         result[dtype] = schemaNames[normalized]
 
 let canonicalDocumentDefinitions = documentDefinitions()
+
+# Schema nodes are immutable, but ORC reference counts are not atomic. Keep
+# temporary references to this shared graph inside one validation call.
+var schemaLock: Lock
+initLock(schemaLock)
 
 proc jsonType(value: JsonNode): string =
   case value.kind
@@ -216,7 +221,7 @@ proc validateValue(value, schema: JsonNode, path: string): DocumentValidation =
 
   success("")
 
-proc validateStarIntelDocument*(document: JsonNode): DocumentValidation =
+proc validateDocument(document: JsonNode): DocumentValidation =
   if document.kind != JObject:
     return failure("wrong_type", "$: expected object")
   for field in ["id", "dataset", "dtype", "schemaVersion"]:
@@ -239,6 +244,13 @@ proc validateStarIntelDocument*(document: JsonNode): DocumentValidation =
   result = validateValue(document, definition, "$")
   if result.ok:
     result.id = document["id"].getStr
+
+proc validateStarIntelDocument*(document: JsonNode): DocumentValidation =
+  acquire(schemaLock)
+  try:
+    result = validateDocument(document)
+  finally:
+    release(schemaLock)
 
 proc parseStarIntelDocument*(encoded: string): tuple[document: JsonNode, validation: DocumentValidation] =
   try:

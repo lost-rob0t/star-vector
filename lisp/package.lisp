@@ -3,6 +3,8 @@
   (:shadow #:search)
   (:export
    #:star-vector-error
+   #:error-status
+   #:error-message
    #:open-store
    #:close-store
    #:with-store

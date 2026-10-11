@@ -32,15 +32,15 @@ Lisp ASDF system. Run the packaged CLI with =nix run=.
 * Command-line client
 
 Vectors are comma-separated decimal values and every operation states the fixed
-store dimension. The store is an atomic JSON snapshot and is suitable for one
-writer process at a time.
+store dimension. New persistent stores are Tek9/LMDB directories with transactional writes
+coordinated across processes. Existing JSON files are read-only legacy snapshots.
 
 #+begin_src sh
-star-vector init vectors.json 3
-star-vector upsert vectors.json 3 document.json 1,0,0
-star-vector get vectors.json 3 doc:example
-star-vector search vectors.json 3 cosine 10 1,0,0
-star-vector delete vectors.json 3 doc:example
+star-vector init vectors.tek9 3
+star-vector upsert vectors.tek9 3 document.json 1,0,0
+star-vector get vectors.tek9 3 doc:example
+star-vector search vectors.tek9 3 cosine 10 1,0,0
+star-vector delete vectors.tek9 3 doc:example
 #+end_src
 
 =document.json= must contain a supported canonical StarIntel document. At
@@ -60,7 +60,7 @@ minimum, a generic document has fields like:
 #+begin_src nim
 import star_vector
 
-let store = openVectorStore("vectors.json", 3)
+let store = openVectorStore("vectors.tek9", 3)
 defer: store.close()
 
 store.upsertDocument(document, @[1.0'f32, 0.0'f32, 0.0'f32])
@@ -70,6 +70,12 @@ let matches = store.search(@[1.0'f32, 0.0'f32, 0.0'f32], vmCosine, 10)
 * C ABI
 
 Include =star_vector.h= and link =libstar_vector.so=. Store handles are opaque.
+Build the shared library with =-d:noSignalHandler -d:useMalloc= (the flake does
+this). It preserves the host runtime's signal handlers and uses the process
+allocator so foreign threads need no Nim allocator registration. Pipe writes
+mask SIGPIPE only on the calling thread. Independent handles may be used
+concurrently. Serialize calls on each individual handle, including close.
+Schema validation is serialized internally to protect shared schema references.
 Strings returned through =sv_get_document= and =sv_search_json= belong to the
 caller and must be released with =sv_string_free=. The pointer returned by
 =sv_last_error= remains owned by the library and is valid until the next call on
@@ -77,7 +83,7 @@ that handle.
 
 #+begin_src c
 sv_store_t store = NULL;
-sv_open("vectors.json", 3, &store);
+sv_open("vectors.tek9", 3, &store);
 sv_upsert_document(store, document_json, vector, 3);
 sv_search_json(store, query, 3, SV_METRIC_COSINE, 10, &results_json);
 sv_string_free(results_json);
@@ -94,7 +100,7 @@ loader path.
 #+begin_src lisp
 (asdf:load-system "star-vector")
 
-(star-vector:with-store (store "vectors.json" 3)
+(star-vector:with-store (store "vectors.tek9" 3)
   (star-vector:upsert-document store document-json #(1.0 0.0 0.0))
   (star-vector:search store #(1.0 0.0 0.0) :cosine 10))
 #+end_src
@@ -132,6 +138,78 @@ bash tests/flake-app.sh
 
 Downstream consumers should pin this producer's immutable revision and consume
 ~packages.<system>.star-vector~ rather than copying its implementation.
+
+* Tek9 storage and explicit legacy migration
+
+Persistent paths now name dedicated Tek9/LMDB directories. The flake pins the
+producer =lost-rob0t/tek9@e6d1cb86a2e268a894eae3acae9617238b2adcff= and consumes
+=packages.<system>.tek9=. An application adapter imports the ASDF library in a
+private SBCL worker per persistent handle; Nim communicates over local pipes.
+This is a process boundary, not an in-process Nim import. There is no listening
+service. No Tek9 implementation is copied into Star Vector. Packaged binaries
+embed the immutable worker executable path. Source builds use
+=STAR_VECTOR_TEK9_WORKER= (set by =nix develop=).
+
+The CLI, C ABI and Lisp client retain their operation signatures and metric
+ordering. Acknowledged mutations use Tek9 =:full= transactions; LMDB coordinates
+writers across handles/processes. Each search streams a single read snapshot
+through a top-k heap. Scores retain the original float32-input/float64-arithmetic
+contract, with document-ID ties. Transient empty-path stores stay in memory.
+512-byte canonical IDs use an isolated hashed storage key, with full-ID collision
+checks before replacement or deletion. Such a collision fails without overwriting.
+
+Old =star-vector/1= JSON files remain readable and are never rewritten on open,
+flush or close. Writes to them fail with a migration instruction. To migrate:
+
+#+begin_src sh
+star-vector migrate old-vectors.json new-tek9-directory 384
+# Optional maximum records in this invocation, for checkpointed progress:
+star-vector migrate old-vectors.json new-tek9-directory 384 1000
+# Repeat the same source and destination to resume and verify readback.
+#+end_src
+
+The migration validates the complete legacy snapshot before touching the target.
+It retains the original file, binds progress to a SHA-1 source-byte fingerprint
+(change detection, not authenticity), dimensions and count, and commits bounded
+batches together with their checkpoints. Batches target 128 records / 1 MiB;
+one larger row is permitted to preserve the existing document contract. An
+incomplete target rejects ordinary opens. Competing migrators are fenced by the
+expected checkpoint. Publication follows full record/count readback and a second
+source fingerprint check. An existing unrelated or unmarked Tek9 store is refused.
+Existing stores are probed through read-only, non-creating LMDB calls before
+Tek9 opens or prepares any named databases. A lock on the directory inode
+coordinates first creation without adding a lock file to the destination.
+A crash before the initial header commit may leave an unmarked directory; choose
+a new destination rather than deleting or adopting unknown data automatically.
+
+** Measured limits and validation
+
+- Exact search still visits all records and validates each decoded document.
+  Work is O(N*d + N*log(k)); retained results are O(k), plus the largest record.
+  It is not an approximate index. Long snapshots can pin LMDB pages.
+- SBCL startup, JSON encoding/decoding, IPC, runtime heaps and mapped pages are
+  real costs. One worker belongs to each persistent handle. Keep handles open
+  across operations; migration batches do not launch a process per record.
+- The producer reserves a fixed 16 GiB virtual map by default; automatic growth
+  is not provided. Map-full failures abort the transaction and surface as errors.
+- Legacy loading/migration still parse the whole JSON snapshot in memory. There
+  is no claim of bounded-memory legacy import, constant total RSS, or power-loss
+  verification from a process-kill test.
+- EOF closes the worker. Normal close waits/reaps it; failed scans terminate it
+  so unread rows cannot corrupt subsequent replies. Worker loss fails the handle;
+  reopen and inspect state rather than retrying an ambiguous mutation blindly.
+  C operations return I/O errors and Lisp raises =star-vector-error=. Do not race
+  close with calls on the same C handle; caller ownership of handle lifetime remains.
+
+=tests/storage_integration.py= covers synthetic cross-language reopen, concurrent
+handles/processes, producer rollback, killed-worker errors, parent-exit cleanup,
+512-byte IDs, source preservation, interrupted/resumed migration and readback.
+=tests/test_search_reference.nim= compares all four metrics with an independent
+exhaustive reference. =benchmarks/storage_benchmark.py= reports separate native
+Tek9 scans, worker bridge scans, Nim searches, no-op IPC, startup/reopen, batch
+writes and parent/worker RSS at 1k/10k/50k synthetic rows. RSS includes mapped
+pages and runtime heaps. Native CI exports JSON artifacts; no benchmark threshold
+or production-readiness claim is implied by these sample sizes.
 
 * RAGE workflow
 

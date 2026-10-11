@@ -101,6 +101,8 @@ proc sv_open(
     setError(nil, SvErrorInvalidArgument, error.msg)
   except VectorStoreError as error:
     setError(nil, storeErrorStatus(error.msg), error.msg)
+  except IOError as error:
+    setError(nil, SvErrorIo, error.msg)
   except OSError as error:
     setError(nil, SvErrorIo, error.msg)
   except CatchableError as error:
@@ -116,10 +118,12 @@ proc sv_close(storePointer: pointer): int32 {.exportc, cdecl, dynlib.} =
     handle.lastError.setLen(0)
     dealloc(cast[pointer](handle))
     SvOk
+  except IOError as error:
+    setError(handle, SvErrorIo, error.msg)
   except OSError as error:
     setError(handle, SvErrorIo, error.msg)
   except CatchableError as error:
-    setError(handle, SvErrorInternal, error.msg)
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
 proc sv_flush(storePointer: pointer): int32 {.exportc, cdecl, dynlib.} =
   if storePointer.isNil:
@@ -129,10 +133,12 @@ proc sv_flush(storePointer: pointer): int32 {.exportc, cdecl, dynlib.} =
     handle.store.flush()
     clearError(handle)
     SvOk
+  except IOError as error:
+    setError(handle, SvErrorIo, error.msg)
   except OSError as error:
     setError(handle, SvErrorIo, error.msg)
   except CatchableError as error:
-    setError(handle, SvErrorInternal, error.msg)
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
 proc sv_dimensions(storePointer: pointer): csize_t {.exportc, cdecl, dynlib.} =
   if storePointer.isNil:
@@ -181,10 +187,12 @@ proc sv_upsert_document(
     setError(handle, SvErrorInvalidArgument, error.msg)
   except VectorStoreError as error:
     setError(handle, storeErrorStatus(error.msg), error.msg)
+  except IOError as error:
+    setError(handle, SvErrorIo, error.msg)
   except OSError as error:
     setError(handle, SvErrorIo, error.msg)
   except CatchableError as error:
-    setError(handle, SvErrorInternal, error.msg)
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
 proc sv_get_document(
   storePointer: pointer,
@@ -204,7 +212,7 @@ proc sv_get_document(
   except VectorStoreError as error:
     setError(handle, storeErrorStatus(error.msg), error.msg)
   except CatchableError as error:
-    setError(handle, SvErrorInternal, error.msg)
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
 proc sv_delete_document(
   storePointer: pointer,
@@ -218,10 +226,12 @@ proc sv_delete_document(
     outDeleted[] = if handle.store.deleteDocument($id): 1'i32 else: 0'i32
     clearError(handle)
     SvOk
+  except IOError as error:
+    setError(handle, SvErrorIo, error.msg)
   except OSError as error:
     setError(handle, SvErrorIo, error.msg)
   except CatchableError as error:
-    setError(handle, SvErrorInternal, error.msg)
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
 proc sv_search_json(
   storePointer: pointer,
@@ -257,7 +267,7 @@ proc sv_search_json(
   except VectorStoreError as error:
     setError(handle, storeErrorStatus(error.msg), error.msg)
   except CatchableError as error:
-    setError(handle, SvErrorInternal, error.msg)
+    setError(handle, (if error of IOError: SvErrorIo else: SvErrorInternal), error.msg)
 
 proc sv_last_error(storePointer: pointer): cstring {.exportc, cdecl, dynlib.} =
   if storePointer.isNil:

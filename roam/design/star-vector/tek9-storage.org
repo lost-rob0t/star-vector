@@ -1,0 +1,168 @@
+:PROPERTIES:
+:ID: 1a062650-2709-43ca-922d-1b2294ce5623
+:END:
+#+title: Imported Tek9 storage
+#+description: Pinned producer library, private worker bridge, streaming search and explicit snapshot migration.
+#+status: IMPLEMENTED
+#+filetags: :star-vector:tek9:storage:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Scope and execution | User | APPROVED | Explicit library integration instruction | Delegated request and issue 5 |
+| Design | Implementing agent | APPROVED | Actual producer API and failure boundaries | Source observations below |
+| Release | Maintainer | PENDING | Exact-head runtime tests and review | Draft PR; no merge authorized |
+
+* Verified facts (2026-10-11)
+
+Star Vector main 59e22b4 uses a Nim table and complete JSON replacement. Packaging
+PR 4 at bc76fb3 provides installed CLI/C/Lisp checks. Its main merge b2cd4f4 was
+incorporated into this feature branch; draft PR 6 now targets main.
+Tek9 e6d1cb86a2e268a894eae3acae9617238b2adcff exports an ASDF library through
+=packages.<system>.tek9=. Its public =put-bulk=, =fetch*=, =delete-document=,
+=with-write-transaction= and =map-database= cover this adapter. =map-database=
+decodes one entry at a time in one LMDB read transaction. Normal writes compose
+with outer transactions; non-local exits abort. =:full= requests data and metadata
+sync. LMDB serializes writers across processes. The map is fixed at 16 GiB by
+default; there is no automatic growth. =put= tracks changed IDs in memory;
+=put-bulk= without change tracking avoids that growth.
+
+* Decision and adversarial review
+
+Import the pinned library in a private SBCL worker per persistent handle, over
+local pipes. No listening service, storage reimplementation, or copied Tek9
+source. Existing producer exports suffice; no upstream patch is justified.
+Keep schema validation and all metric arithmetic in Nim. Cursor results are
+streamed into a bounded top-k heap with ID tie-breaking. One search holds a read
+snapshot; slow readers pin LMDB pages. Worker startup, IPC, JSON and full record
+decoding have costs that must be measured. Worker failure invalidates its handle;
+never retry an ambiguous mutation automatically.
+
+New paths are dedicated Tek9 directories. Empty-path transient stores retain
+the memory backend. Existing JSON files are read-only through the legacy reader;
+flush/close never rewrite them. Explicit migration validates the entire legacy
+snapshot first, preserving its original bytes, then writes to a different path.
+The legacy parser still uses memory proportional to the snapshot and is not an
+archive-scale streaming importer. Source fingerprint, dimensions, count and
+progress are transactional metadata. Each bounded batch and checkpoint commit together.
+Incomplete destinations reject ordinary opens/mutations. Resume checks source
+identity and progress; readback verifies every record before publication.
+Competing migrators are fenced by expected progress. No automatic deletion or
+overwrite of existing unrelated stores. Synthetic fixtures only.
+
+* Acceptance and remaining evidence
+
+CLI/C ABI/Lisp tests, process-kill/reopen, failed-write rollback, snapshot search
+ordering, legacy source preservation, interrupted/resumed migration, and
+measured scale/memory behavior. Machine power-loss durability is a producer
+guarantee, not a result established by process-kill tests. Retain draft status
+if any required build/test cannot be executed.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Record scoped integration design and gate | Codex | Issue 5; inspected producer and consumer source |
+| 2026-10-11 | Record native acceptance and synthetic scale measurements | Codex | Run 38114387574 at 0c244fedba0030af851bbba27a66885cf31389db |
+| 2026-10-11 | Correct unrelated-store rejection before producer DBI preparation | Codex | Independent review of 5388c51; read-only ownership probe and preservation regression |
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 13984e6c-f523-423a-a892-5b2cd25fe1cc
+:RECORDED_AT: 2026-10-11T04:56:46+00:00
+:END:
+
+** Summary
+Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed migration; draft pending native storage/runtime acceptance.
+
+** Files
+- src/star_vector/store.nim
+- lisp/tek9-worker.lisp
+- tests/storage_integration.py
+
+** Tests
+- 8 repository Python tests passed locally
+- Nim 2.2.6 CLI and C ABI compilation passed locally
+
+** Commits
+- None
+
+** Notes
+- Locked Nix derivations evaluate; local build blocked by remote dependency downloads. Storage runtime and scale acceptance remain pending CI; no release or deployment.
+
+* Additional execution evidence
+
+- Nim 2.2.6 independent exhaustive-reference tests passed for all four metrics,
+  ties, zero vectors and detached result ownership.
+- Local C ABI and SBCL 2.5.2 CFFI transient-store/startup-failure tests passed.
+  The latter first exposed a signal-handler conflict; the shared library now
+  uses =-d:noSignalHandler= and thread-local SIGPIPE masking for pipe writes.
+- The native CI foreign-thread test exposed Nim 2.2.12's allocator registration
+  requirement. The shared library uses =-d:useMalloc= so host threads need no
+  allocator lifecycle calls. Individual handles require serialized access;
+  independent handles have a concurrent integration test.
+- Initial native CI caught missing worker compiler and a non-EQL string
+  =defconstant=; both were repaired. Native acceptance is recorded below.
+- A longer local Nim 2.2.12 foreign-thread test then exposed shared schema JSON
+  reference-count races. Schema validation now holds a dedicated lock across
+  each complete validation, including temporary reference destruction. The
+  integration suite repeats 1,600 transient upserts and searches on 16 handles
+  across eight caller threads in addition to the persistent concurrency tests.
+
+* Native acceptance evidence
+
+Independent review of =5388c51= identified that Tek9's =open-database= and
+transaction preparation can create named databases before an application
+transaction starts. Rejecting an unrelated environment inside that transaction
+therefore did not preserve it. The corrected adapter first reads the ownership
+header using the producer's public LMDB dependency with =:read-only t= and
+=:if-does-not-exist :error=, then applies format/dimension/migration checks before
+calling the producer's writable open. The producer remains responsible for all
+record writes, transactions, and encoding. Normal LMDB reader coordination is
+retained; the probe does not start a write transaction or create named databases.
+A Linux advisory lock on the directory inode coordinates simultaneous first
+creators without adding files to an existing store. A synthetic foreign Tek9
+fixture now verifies that both rejected open and rejected migration preserve
+the named-database inventory, all encoded records, exact =data.mdb= bytes, and
+directory file names. A separate 16-opener test exercises first-creation races.
+Corrected-head runtime evidence will be recorded in draft PR 6 before re-review.
+
+[[https://github.com/lost-rob0t/star-vector/actions/runs/38114387574][Run 38114387574]] passed at
+=0c244fedba0030af851bbba27a66885cf31389db= on x86_64-linux and aarch64-linux.
+Both executed the locked Nix build, original Nim/CLI/C/Lisp suites, independent
+four-metric search oracle, integration tests, installed clients, and the app
+outside the checkout. The integration suite verified concurrent independent C
+handles on foreign threads, concurrent CLI writers, C/Lisp/CLI reopen, worker
+loss and parent-exit cleanup, failed-batch rollback, and process termination
+inside a producer transaction containing both data and migration progress.
+Legacy migration tests verified source preservation, checkpoint resume, full
+readback, changed-source rejection, and rejection of invalid/unrelated inputs.
+The eight repository Python tests and documentation/schema gates passed.
+
+Full-durability synthetic samples: 128 dimensions, 1 KiB document payload, k=10.
+Times are seconds; RSS is MiB, sampled every 5 ms during search. These are single
+CI samples, not latency distributions or machine power-loss tests.
+
+| Architecture | Rows | Native scan | Bridge scan | Search | Parent RSS | Worker RSS |
+|--------------+------+-------------+-------------+--------+------------+------------|
+| x86_64 | 1,000 | 0.012 | 0.047 | 0.032 | 29.8 | 123.5 |
+| x86_64 | 10,000 | 0.079 | 0.191 | 0.194 | 29.9 | 160.0 |
+| x86_64 | 50,000 | 0.290 | 1.002 | 1.026 | 30.0 | 553.9 |
+| aarch64 | 1,000 | 0.020 | 0.056 | 0.054 | 31.5 | 120.2 |
+| aarch64 | 10,000 | 0.129 | 0.400 | 0.352 | 31.6 | 158.4 |
+| aarch64 | 50,000 | 0.481 | 1.950 | 1.706 | 31.6 | 416.9 |
+
+At 50,000 rows, reopen was 43/53 ms and no-op IPC 22/26 microseconds
+(x86_64/aarch64). Batch write time was 2.95/4.45 seconds; this synthetic adapter
+path excludes Nim ingress validation. Store size was 206,204,928 bytes.
+Native scans include Conspack decoding; bridge scans add pipe/JSON/Python work;
+searches add Nim schema validation, scoring and top-k. These are separate paths,
+not additive costs. Parent RSS includes the Python driver, worker RSS includes
+SBCL heap and LMDB pages. The heap algorithm bounds retained candidates, not
+total process memory; worker RSS grew materially with scale.
+
+Full JSON results are the run's =storage-benchmark-ubuntu-24.04= and
+=storage-benchmark-ubuntu-24.04-arm= artifacts. The local Nix build was blocked
+by dependency-download errors; the successful runtime proof comes from native CI.
+Release approval and production-readiness remain outside this acceptance.

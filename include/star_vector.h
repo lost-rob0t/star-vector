@@ -16,6 +16,9 @@ extern "C" {
 
 typedef void *sv_store_t;
 
+/* Independent handles may be used concurrently. Calls on one handle, including
+ * close, must be serialized by the caller. */
+
 typedef int32_t sv_status_t;
 #define SV_OK 0
 #define SV_ERROR_INVALID_ARGUMENT 1
