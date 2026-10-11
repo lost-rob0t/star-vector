@@ -31,28 +31,10 @@
             pkgs.sbcl.pkgs.cffi-grovel
           ];
           lispRegistry = pkgs.lib.concatMapStringsSep ":" (package: "${package}//") lispPackages;
-          worker = pkgs.runCommand "star-vector-tek9-worker" {
-            nativeBuildInputs = [ pkgs.sbcl pkgs.stdenv.cc ] ++ lispPackages;
-          } ''
-            export XDG_CACHE_HOME="$out/lib/cache"
-            export CL_SOURCE_REGISTRY="${lispRegistry}:"
-            mkdir -p "$out/bin"
-            # Compile in a disposable process. Save from a fresh FASL-loading
-            # process so compiler allocation does not fragment the core image.
-            sbcl --noinform --non-interactive --no-userinit --no-sysinit \
-              --eval '(require :asdf)' \
-              --eval '(asdf:load-system :cffi)' \
-              --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
-              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")' \
-              --eval '(asdf:load-system "star-vector-tek9")'
-            sbcl --noinform --non-interactive --no-userinit --no-sysinit \
-              --eval '(require :asdf)' \
-              --eval '(asdf:load-system :cffi)' \
-              --eval '(push #P"${pkgs.lmdb.out}/lib/" cffi:*foreign-library-directories*)' \
-              --eval '(asdf:load-asd #P"${self}/lisp/star-vector-tek9.asd")'  \
-              --eval '(asdf:load-system "star-vector-tek9")' \
-              --eval "(sb-ext:save-lisp-and-die \"$out/bin/star-vector-tek9-worker\" :toplevel #'star-vector-tek9:run :executable t)"
-          '';
+          worker = import ./nix/tek9-worker.nix {
+            inherit pkgs lispPackages lispRegistry;
+            source = self;
+          };
           package = pkgs.stdenv.mkDerivation {
             pname = "star-vector";
             version = "0.1.0";

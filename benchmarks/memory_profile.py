@@ -38,7 +38,7 @@ def memory(pid, mappings=False):
                     parts = line.split(maxsplit=5)
                     path = parts[5] if len(parts) == 6 else ""
                     category = ("lmdb" if path.endswith("/data.mdb") else
-                                "worker_image" if "star-vector-tek9-worker" in path else
+                                "worker_image" if "star-vector-tek9-worker" in path or path.endswith("/sbcl.core") else
                                 "other_file" if path.startswith("/") else "anonymous_mapping")
                     group = groups.setdefault(category, {key + "_kib": 0 for key in MAPPING_FIELDS})
                 elif group is not None:
@@ -152,7 +152,7 @@ def run_case(root, path, directory, mode):
 
         wait_phase(directory, pid, "open")
         opened = capture([pid])
-        repeated = [profiled_search(handle, pid) for _ in range(3)]
+        repeated = [profiled_search(handle, pid) for _ in range(10)]
         after_gc = collect(handle, pid)
         client.check(client.lib.sv_close(handle)); handles.remove((handle, pid))
         closed = capture([])
@@ -234,9 +234,10 @@ def compare(before, after, output):
             "Dynamic-space occupancy includes garbage; only after_full_gc reports an explicit full-GC live-heap estimate.",
             "Dynamic peak sampled before/after every 128th callback; callback allocation counters may reflect SBCL allocation-region granularity.",
             "Callback allocation excludes producer cursor/Conspack decoding; total scan allocation includes both and small profiling overhead.",
-            "Forced GC occurs only at labeled diagnostic boundaries, not between the three repeated searches or during uninstrumented timings.",
+            "Forced GC occurs only at labeled diagnostic boundaries, not between the ten repeated searches or during uninstrumented timings.",
             "Parent metrics include the Python driver; summed RSS double-counts shared pages, while PSS apportions them.",
-            "Timing images contain the same dormant profiling code, but instrumentation is inactive; the normal distributed worker excludes it."
+            "Timing workers contain dormant profiling code, but instrumentation is inactive; the normal distributed worker excludes it.",
+            "Candidate loads precompiled FASLs into SBCL; baseline uses its original saved image. Startup is measured separately."
         ]
         Path(output).write_text(json.dumps(result, indent=2) + "\n")
         summary = {}
@@ -254,7 +255,8 @@ def compare(before, after, output):
                 after_full_gc=profile["after_full_gc"]["processes"],
                 live_heap_bytes=profile["after_full_gc"]["heap"]["dynamic_used_bytes"],
                 startup_heaps=[e for ev in profile["worker_events"].values() for e in ev if e["phase"] in ("boot", "open")],
-                repeated_worker_steady=[r["steady"]["workers"] for r in profile["repeated"]],
+                repeated_worker_steady=[{pid: {k: v for k, v in mem.items() if k != "mappings"}
+                    for pid, mem in r["steady"]["workers"].items()} for r in profile["repeated"]],
                 multi_natural=profile["multiple_handles"]["warm"]["sum_process_metrics"],
                 multi_collected=profile["multiple_handles"]["after_full_gc"]["sum_process_metrics"],
                 concurrent=profile["multiple_handles"]["concurrent"],

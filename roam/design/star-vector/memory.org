@@ -165,3 +165,46 @@ Build dependency FASLs separately and save the worker from a fresh loader proces
 
 ** Notes
 - Prior native run proved reduced allocation but not sustained RSS. This experiment targets saved-core fragmentation; no GC policy, memory limit, storage or API changes.
+
+* Follow-up: reproducible worker startup
+
+The fresh-loader image at 685daee passed native tests, but identical x86 builds
+produced different resident-memory outcomes: job 114407622017 settled near
+326 MiB while job 114407631428 reached 537 MiB by search three. ARM job
+114407622014 stayed near 316 MiB. SBCL 2.6.8 save.c lines 735-768 explicitly
+document that its two-pass core compaction can retain large zeroed gaps.
+Sources: https://github.com/sbcl/sbcl/blob/sbcl-2.6.8/src/runtime/save.c and
+https://github.com/sbcl/sbcl/blob/sbcl-2.6.8/src/runtime/gc-common.c, retrieved
+2026-10-11.
+
+Execution gate: replace custom saved-image packaging with an exec launcher
+that loads immutable precompiled FASLs into the packaged SBCL runtime, then
+runs the same imported adapter. Compile caches and CFFI libraries remain in
+the package. Measure startup time/high-water RSS as well as ten consecutive
+searches, reopen and concurrent handles. Baseline retains its original saved
+image. This removes dependence on custom-core packing; it does not alter
+producer storage, runtime heap limits, or force production GC.
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 7973e495-e180-4d2c-a131-6cc32d82f825
+:RECORDED_AT: 2026-10-11T06:39:24+00:00
+:END:
+
+** Summary
+Use a packaged SBCL launcher with immutable precompiled FASLs and extend the benchmark to ten natural repeated searches.
+
+** Files
+- nix/tek9-worker.nix
+- nix/memory-profile.nix
+- flake.nix
+- benchmarks/memory_profile.py
+
+** Tests
+- None
+
+** Commits
+- None
+
+** Notes
+- Native acceptance and startup/residency comparison remain pending. No runtime heap limits or GC policy were changed.
