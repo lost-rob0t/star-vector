@@ -95,5 +95,9 @@ Authored the pinned Tek9 adapter, bounded exact search and explicit checkpointed
 - Local C ABI and SBCL 2.5.2 CFFI transient-store/startup-failure tests passed.
   The latter first exposed a signal-handler conflict; the shared library now
   uses =-d:noSignalHandler= and thread-local SIGPIPE masking for pipe writes.
+- The native CI foreign-thread test exposed Nim 2.2.12's allocator registration
+  requirement. The shared library uses =-d:useMalloc= so host threads need no
+  allocator lifecycle calls. Individual handles require serialized access;
+  independent handles have a concurrent integration test.
 - Initial native CI caught missing worker compiler and a non-EQL string
   =defconstant=; both were repaired. Runtime storage acceptance remains pending.

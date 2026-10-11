@@ -67,7 +67,7 @@
               mkdir -p build
               nim c -d:release --threads:on --mm:orc --path:src \
                 -d:tek9Worker=${worker}/bin/star-vector-tek9-worker --out:build/star-vector src/star_vector_cli.nim
-              nim c -d:release -d:noSignalHandler --app:lib --threads:on --mm:orc --path:src \
+              nim c -d:release -d:noSignalHandler -d:useMalloc --app:lib --threads:on --mm:orc --path:src \
                 -d:tek9Worker=${worker}/bin/star-vector-tek9-worker --out:build/libstar_vector.so src/star_vector/c_api.nim
               runHook postBuild
             '';
