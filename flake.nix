@@ -109,7 +109,7 @@
               export CL_SOURCE_REGISTRY="${lispRegistry}:"
               STAR_VECTOR_CLI="$out/bin/star-vector" bash "$sourceRoot/tests/test_cli.sh"
               $CC -std=c11 -Wall -Wextra -Werror -I"$out/include" \
-                "$sourceRoot/tests/test_c_api.c" -L"$out/lib" \
+                "$sourceRoot/tests/test_c_api.c" -L"$out/lib" -lstar_vector \
                 -Wl,-rpath,"$out/lib" -o test-installed-c-api
               ./test-installed-c-api
               STAR_VECTOR_LIBRARY="$out/lib/libstar_vector.so" \
