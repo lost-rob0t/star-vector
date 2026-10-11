@@ -39,7 +39,7 @@
                                       :key-encoding :utf-8 :value-encoding :octets)))
           (lmdb:get-db "std" :env env :if-does-not-exist :error)
           (lmdb:with-txn (:env env :write nil)
-            (let ((encoded (lmdb:get meta "header")))
+            (let ((encoded (lmdb:g3t meta "header")))
               (when encoded (tek9:doc-value (tek9:$ encoded)))))))
     (lmdb:lmdb-not-found-error () nil)))
 
