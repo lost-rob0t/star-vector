@@ -5,9 +5,13 @@
 
   inputs.tek9.url = "git+https://github.com/lost-rob0t/tek9?rev=e6d1cb86a2e268a894eae3acae9617238b2adcff";
   inputs.tek9.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.memory-baseline = {
+    url = "git+https://github.com/lost-rob0t/star-vector?rev=0247e40644d3277cf1c4f61337e449f278693688";
+    flake = false;
+  };
 
   outputs =
-    { self, nixpkgs, tek9 }:
+    { self, nixpkgs, tek9, memory-baseline }:
     let
       systems = [
         "x86_64-linux"
@@ -165,11 +169,18 @@
           default = package;
           star-vector = package;
           tek9-worker = worker;
+          memory-profile = import ./nix/memory-profile.nix {
+            inherit pkgs lispPackages lispRegistry;
+            baseline = memory-baseline;
+            candidate = self;
+            validatedPackage = package;
+          };
         }
       );
 
       checks = forAllSystems (system: {
         default = self.packages.${system}.default;
+        memory = self.packages.${system}.memory-profile;
       });
 
       apps = forAllSystems (system: {

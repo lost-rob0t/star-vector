@@ -1,0 +1,76 @@
+:PROPERTIES:
+:ID: 223e2b75-5d9c-440f-ad2f-46c4ced9b837
+:END:
+#+title: Measured vector memory reduction
+#+description: Matched worker/parent allocation and mapping profiles before reducing transient search memory.
+#+status: IMPLEMENTED
+#+filetags: :star-vector:memory:performance:
+
+* Approval Table
+
+| Approval area | Required authority | State | Evidence required | Evidence reference |
+|---------------+--------------------+-------+-------------------+--------------------|
+| Scope and execution | User | APPROVED | Explicit memory improvement request | Issue 7 and delegated instruction |
+| Profiling design | Implementing agent | APPROVED | Inspected current scan and benchmark code | Observations below |
+| Optimization selection | Implementing agent | PENDING | Actual baseline allocation/mapping measurements | Baseline CI artifacts |
+| Merge | Independent reviewer | PENDING | Corrected-head review and native CI | Separate PR required |
+
+* Verified observations
+
+The starting tree is merged =0247e40644d3277cf1c4f61337e449f278693688=.
+Its worker decodes one Tek9 record, serializes the stored JSON string inside a
+second JSON object, and Nim parses that envelope and then the record string.
+The current top-k heap retains O(k) results. Prior 50k-row measurements show
+roughly 30 MiB parent RSS and hundreds of MiB worker RSS; those measurements
+combine anonymous allocations, code/core mappings and LMDB file pages.
+No claim that all worker RSS is retained live data is supported yet.
+
+* Plan and gates
+
+First pin the merged source as a validation-only baseline. Build baseline and
+candidate with the same Nim/SBCL/Tek9 dependencies and identical benchmark-only
+instrumentation. Record RSS/PSS/anonymous memory and mapping classes separately,
+SBCL cumulative allocation, sampled dynamic-space occupancy and callback
+allocation, natural steady state and explicit full-GC live bytes. Instrumented
+images are benchmark artifacts; the normal worker remains uninstrumented.
+
+Use a shared synthetic 50k-row, 128-dimensional, 1 KiB document dataset, with
+k=10, repeated searches, reopen, and multiple independent handles. Compare
+latency/throughput as well as peak/steady memory. Sampling and forced-GC effects
+must be labeled; mapped pages must not be reported as live heap or hidden from
+total RSS. Select an implementation change only after observing the baseline.
+
+Preserve producer import, read-snapshot consistency, exact ordering/ties,
+CLI/C ABI/Lisp behavior, concurrency, crash recovery, migration checkpoints and
+foreign-store/source preservation. Do not change user data, lower heap limits
+as a substitute for reducing allocation, copy producer storage, or deploy.
+Rerun native x86_64/aarch64 checks and request independent review before merge.
+
+* Changelog
+
+| Date | Change | Author or actor | Evidence |
+|------+--------+-----------------+----------|
+| 2026-10-11 | Record profiling-first scope and acceptance gates | Codex | Issue 7; merged source inspection |
+
+* IMPLEMENTED RAGE Execution Record
+:PROPERTIES:
+:STATUS_EVENT_ID: 34dc42e1-65b6-46e3-9e10-6ae33875db7d
+:RECORDED_AT: 2026-10-11T06:08:34+00:00
+:END:
+
+** Summary
+Authored matched memory profiling infrastructure; baseline execution and optimization selection remain pending.
+
+** Files
+- benchmarks/memory_profile.py
+- benchmarks/worker-profile.lisp
+- nix/memory-profile.nix
+
+** Tests
+- python3 -m py_compile benchmarks/memory_profile.py passed
+
+** Commits
+- None
+
+** Notes
+- This terminal loop records profiling infrastructure only, not measured improvement or native acceptance. Optimization and merge gates remain pending.
