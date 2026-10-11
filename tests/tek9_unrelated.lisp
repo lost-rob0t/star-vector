@@ -22,7 +22,7 @@
           (names nil) (inventory nil))
       (lmdb:with-txn (:env env :write nil)
         (lmdb:do-db (name value catalog)
-          (declare (ignore value)) (push name names)))
+          (push name names)))
       (dolist (name (sort names #'string<))
         (let ((db (lmdb:get-db name :env env :if-does-not-exist :error
                                    :key-encoding :octets :value-encoding :octets))
